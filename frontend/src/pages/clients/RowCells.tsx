@@ -44,7 +44,7 @@ export const ClientRowActions = memo(function ClientRowActions({
           size="small"
           type="text"
           style={ICON_BUTTON_STYLE}
-          icon={<QrcodeOutlined />}
+          icon={<QrcodeOutlined aria-hidden />}
           aria-label={t('pages.clients.qrCode')}
           onClick={() => onShowQr(email)}
         />
@@ -54,7 +54,7 @@ export const ClientRowActions = memo(function ClientRowActions({
           size="small"
           type="text"
           style={ICON_BUTTON_STYLE}
-          icon={<InfoCircleOutlined />}
+          icon={<InfoCircleOutlined aria-hidden />}
           aria-label={t('pages.clients.clientInfo')}
           onClick={() => onShowInfo(email)}
         />
@@ -64,7 +64,7 @@ export const ClientRowActions = memo(function ClientRowActions({
           size="small"
           type="text"
           style={ICON_BUTTON_STYLE}
-          icon={<RetweetOutlined />}
+          icon={<RetweetOutlined aria-hidden />}
           aria-label={t('pages.inbounds.resetTraffic')}
           onClick={() => onResetTraffic(email)}
         />
@@ -74,7 +74,7 @@ export const ClientRowActions = memo(function ClientRowActions({
           size="small"
           type="text"
           style={ICON_BUTTON_STYLE}
-          icon={<EditOutlined />}
+          icon={<EditOutlined aria-hidden />}
           aria-label={t('edit')}
           onClick={() => onEdit(email)}
         />
@@ -85,7 +85,7 @@ export const ClientRowActions = memo(function ClientRowActions({
           type="text"
           danger
           style={ICON_BUTTON_STYLE}
-          icon={<DeleteOutlined />}
+          icon={<DeleteOutlined aria-hidden />}
           aria-label={t('delete')}
           onClick={() => onDelete(email)}
         />
@@ -130,7 +130,9 @@ export const ClientInboundChips = memo(function ClientInboundChips({
     const proto = (inboundsById[id]?.protocol || '').toLowerCase();
     return (
       <Tooltip key={id} title={label(id)}>
-        <Tag color={protocolColors[proto] ?? 'default'} style={CHIP_STYLE}>{label(id)}</Tag>
+        <Tag color={protocolColors[proto] ?? 'default'} style={CHIP_STYLE}>
+          {label(id)}
+        </Tag>
       </Tooltip>
     );
   };
@@ -146,7 +148,9 @@ export const ClientInboundChips = memo(function ClientInboundChips({
           placement="bottomRight"
           content={<div style={OVERFLOW_LIST_STYLE}>{overflow.map(chip)}</div>}
         >
-          <Tag color="default" style={OVERFLOW_CHIP_STYLE}>+{overflow.length}</Tag>
+          <Tag color="default" style={OVERFLOW_CHIP_STYLE}>
+            +{overflow.length}
+          </Tag>
         </Popover>
       )}
     </>

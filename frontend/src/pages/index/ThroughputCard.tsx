@@ -16,7 +16,13 @@ interface ThroughputCardProps {
   isMobile: boolean;
 }
 
-export default function ThroughputCard({ status, up, down, labels, isMobile }: ThroughputCardProps) {
+export default function ThroughputCard({
+  status,
+  up,
+  down,
+  labels,
+  isMobile,
+}: ThroughputCardProps) {
   const { t } = useTranslation();
   const { token } = theme.useToken();
   const accent = token.colorPrimary;
@@ -41,12 +47,12 @@ export default function ThroughputCard({ status, up, down, labels, isMobile }: T
         </div>
         <div className="ov-wide-legend">
           <div className="ov-legend-label">
-            <ArrowUpOutlined style={{ color: accent }} />
+            <ArrowUpOutlined aria-hidden style={{ color: accent }} />
             {t('pages.index.upload')}
             <span className="ov-legend-num">{SizeFormatter.speedFormat(status.netIO.up)}</span>
           </div>
           <div className="ov-legend-label">
-            <ArrowDownOutlined style={{ color: downColor }} />
+            <ArrowDownOutlined aria-hidden style={{ color: downColor }} />
             {t('pages.index.download')}
             <span className="ov-legend-num">{SizeFormatter.speedFormat(status.netIO.down)}</span>
           </div>

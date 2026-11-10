@@ -19,6 +19,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
+	"github.com/mhsanaei/3x-ui/v3/internal/util/version"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/global"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
 )
@@ -40,8 +41,11 @@ type PanelUpdateInfo struct {
 }
 
 const (
-	panelUpdaterURL      = "https://raw.githubusercontent.com/MHSanaei/3x-ui/main/update.sh"
+	forkRepo             = "aghajani82/3x-ui"
+	panelUpdaterURL      = "https://raw.githubusercontent.com/" + forkRepo + "/main/update.sh"
+	panelReleaseAPI      = "https://api.github.com/repos/" + forkRepo + "/releases"
 	maxPanelUpdaterBytes = 2 << 20
+	maxPanelReleaseBytes = 2 << 20
 	// devReleaseTag is the fixed-tag rolling pre-release the CI force-moves to the
 	// newest main commit; the dev update channel installs from it.
 	devReleaseTag = "dev-latest"
@@ -248,18 +252,27 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 	updateScript := fmt.Sprintf("set -e; trap 'rm -f %s' EXIT; %s %s", shellQuote(scriptPath), shellQuote(bash), shellQuote(scriptPath))
 	runIDEnv := "XUI_UPDATE_RUN_ID=" + strconv.FormatInt(runID, 10)
 	statusFileEnv := "XUI_UPDATE_STATUS_FILE=" + statusFile
+	// update.sh sends its curl downloads through the panel egress bridge. With socks5h the
+	// proxy resolves GitHub's hostnames, since this server's own DNS may be filtered.
+	egressEnv := "XUI_UPDATE_PROXY=" + strings.Replace((&service.SettingService{}).PanelEgressProxyURL(), "socks5://", "socks5h://", 1)
+	proxyEnv := updateProxyEnvVars()
 
 	if systemdRun, err := exec.LookPath("systemd-run"); err == nil {
 		unitName := fmt.Sprintf("x-ui-web-update-%d", time.Now().Unix())
-		cmd := exec.CommandContext(context.Background(), systemdRun,
+		args := []string{
 			"--unit", unitName,
-			"--setenv", "XUI_MAIN_FOLDER="+mainFolder,
-			"--setenv", "XUI_SERVICE="+serviceFolder,
-			"--setenv", "XUI_UPDATE_TAG="+updateTag,
+			"--setenv", "XUI_MAIN_FOLDER=" + mainFolder,
+			"--setenv", "XUI_SERVICE=" + serviceFolder,
+			"--setenv", "XUI_UPDATE_TAG=" + updateTag,
 			"--setenv", runIDEnv,
 			"--setenv", statusFileEnv,
-			bash, "-lc", updateScript,
-		)
+			"--setenv", egressEnv,
+		}
+		for _, kv := range proxyEnv {
+			args = append(args, "--setenv", kv)
+		}
+		args = append(args, bash, "-lc", updateScript)
+		cmd := exec.CommandContext(context.Background(), systemdRun, args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			output := strings.TrimSpace(string(out))
@@ -283,6 +296,7 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 		"XUI_UPDATE_TAG="+updateTag,
 		runIDEnv,
 		statusFileEnv,
+		egressEnv,
 	)
 	setDetachedProcess(cmd)
 	if err := cmd.Start(); err != nil {
@@ -296,6 +310,18 @@ func (s *PanelService) startUpdate(useDev bool) (int64, error) {
 	recordUpdatePID(cmd.Process.Pid)
 	launched = true
 	return runID, nil
+}
+
+// updateProxyEnvVars forwards ambient proxy env vars to systemd-run's child,
+// which (unlike the bash fallback) inherits nothing but --setenv.
+func updateProxyEnvVars() []string {
+	var out []string
+	for _, key := range []string{"https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY"} {
+		if v := os.Getenv(key); v != "" {
+			out = append(out, key+"="+v)
+		}
+	}
+	return out
 }
 
 // acquireUpdateSlot claims the single in-flight-update slot for runID. It
@@ -413,9 +439,9 @@ func fetchLatestPanelVersion() (string, error) {
 // fetchPanelRelease fetches a release from GitHub. An empty tag resolves the
 // latest stable release; a non-empty tag (e.g. dev-latest) resolves that tag.
 func fetchPanelRelease(tag string) (*service.Release, error) {
-	url := "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest"
+	url := panelReleaseAPI + "/latest"
 	if tag != "" {
-		url = "https://api.github.com/repos/MHSanaei/3x-ui/releases/tags/" + tag
+		url = panelReleaseAPI + "/tags/" + tag
 	}
 	client := (&service.SettingService{}).NewProxiedHTTPClient(10 * time.Second)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
@@ -432,7 +458,7 @@ func fetchPanelRelease(tag string) (*service.Release, error) {
 	}
 
 	var release service.Release
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxPanelReleaseBytes)).Decode(&release); err != nil {
 		return nil, err
 	}
 	return &release, nil
@@ -505,48 +531,11 @@ func resolveUpdateFolders() (string, string) {
 }
 
 func isNewerVersion(latest string, current string) bool {
-	cmp, ok := compareVersionStrings(latest, current)
+	cmp, ok := version.Compare(latest, current)
 	if !ok {
-		return normalizeVersionTag(latest) != normalizeVersionTag(current)
+		return version.Normalize(latest) != version.Normalize(current)
 	}
 	return cmp > 0
-}
-
-func compareVersionStrings(a string, b string) (int, bool) {
-	aParts, okA := parseVersionParts(a)
-	bParts, okB := parseVersionParts(b)
-	if !okA || !okB {
-		return 0, false
-	}
-	for i := range len(aParts) {
-		if aParts[i] > bParts[i] {
-			return 1, true
-		}
-		if aParts[i] < bParts[i] {
-			return -1, true
-		}
-	}
-	return 0, true
-}
-
-func parseVersionParts(version string) ([3]int, bool) {
-	var result [3]int
-	parts := strings.Split(normalizeVersionTag(version), ".")
-	if len(parts) != 3 {
-		return result, false
-	}
-	for i, part := range parts {
-		n, err := strconv.Atoi(part)
-		if err != nil {
-			return result, false
-		}
-		result[i] = n
-	}
-	return result, true
-}
-
-func normalizeVersionTag(version string) string {
-	return strings.TrimPrefix(strings.TrimSpace(version), "v")
 }
 
 func shellQuote(value string) string {

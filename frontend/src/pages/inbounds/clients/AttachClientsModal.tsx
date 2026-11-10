@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Input, Modal, Select, Space, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 
+import { selectTagRender } from '@/components/form';
 import { HttpUtil } from '@/utils';
 import { formatInboundLabel } from '@/lib/inbounds/label';
 import { coerceInboundJsonField, type DBInbound } from '@/models/dbinbound';
@@ -57,14 +58,20 @@ export default function AttachClientsModal({
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (!open) return;
-    const rows = source ? readClientRows(source.settings) : [];
-    setClientRows(rows);
-    setSelectedEmails(rows.map((r) => r.email));
-    setTargetIds([]);
-    setSearch('');
-  }, [open, source]);
+  // React resets this during render rather than in an effect so the modal's
+  // first open frame already shows cleared fields.
+  const openSource = open ? source : null;
+  const [syncedSource, setSyncedSource] = useState<DBInbound | null>(null);
+  if (openSource !== syncedSource) {
+    setSyncedSource(openSource);
+    if (openSource) {
+      const rows = readClientRows(openSource.settings);
+      setClientRows(rows);
+      setSelectedEmails(rows.map((r) => r.email));
+      setTargetIds([]);
+      setSearch('');
+    }
+  }
 
   const targetOptions = useMemo(() => {
     if (!source) return [];
@@ -129,7 +136,9 @@ export default function AttachClientsModal({
       const skipped = result.skipped?.length ?? 0;
       const errors = result.errors?.length ?? 0;
       if (errors > 0) {
-        messageApi.warning(t('pages.inbounds.attachClientsResultMixed', { attached, skipped, errors }));
+        messageApi.warning(
+          t('pages.inbounds.attachClientsResultMixed', { attached, skipped, errors }),
+        );
       } else {
         messageApi.success(t('pages.inbounds.attachClientsResult', { attached, skipped }));
       }
@@ -151,7 +160,9 @@ export default function AttachClientsModal({
       }}
       okText={t('pages.inbounds.attachClients')}
       cancelText={t('cancel')}
-      title={t('pages.inbounds.attachClientsTitle', { remark: formatInboundLabel(source?.tag, source?.remark) })}
+      title={t('pages.inbounds.attachClientsTitle', {
+        remark: formatInboundLabel(source?.tag, source?.remark),
+      })}
       width={680}
     >
       {messageContextHolder}
@@ -197,6 +208,7 @@ export default function AttachClientsModal({
       ) : (
         <Select
           mode="multiple"
+          tagRender={selectTagRender}
           aria-label={t('pages.inbounds.attachClientsTargets')}
           style={{ width: '100%' }}
           value={targetIds}

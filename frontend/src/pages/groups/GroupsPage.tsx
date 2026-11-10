@@ -1,4 +1,4 @@
-import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -57,7 +57,10 @@ import {
 } from '@/schemas/client';
 import { parseMsg } from '@/utils/zodValidate';
 
-const ClientRecordListSchema = z.array(ClientRecordSchema).nullable().transform((v) => v ?? []);
+const ClientRecordListSchema = z
+  .array(ClientRecordSchema)
+  .nullable()
+  .transform((v) => v ?? []);
 
 const SubLinksModal = lazy(() => import('../clients/SubLinksModal'));
 const ClientBulkAdjustModal = lazy(() => import('../clients/ClientBulkAdjustModal'));
@@ -86,14 +89,19 @@ async function fetchEmailsForGroup(name: string): Promise<string[]> {
 export default function GroupsPage() {
   usePageTitle();
   const { t } = useTranslation();
+  const uid = useId();
   const { isDark, isUltra, antdThemeConfig } = useTheme();
   const { isMobile } = useMediaQuery();
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
-  useEffect(() => { setMessageInstance(messageApi); }, [messageApi]);
+  useEffect(() => {
+    setMessageInstance(messageApi);
+  }, [messageApi]);
   const queryClient = useQueryClient();
 
-  const { subSettings, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({ list: false });
+  const { subSettings, bulkAdjust, bulkAddToGroup, bulkRemoveFromGroup, bulkDelete } = useClients({
+    list: false,
+  });
 
   const groupsQuery = useQuery({
     queryKey: keys.clients.groups(),
@@ -111,25 +119,33 @@ export default function GroupsPage() {
   const createMut = useMutation({
     mutationFn: (body: { name: string }) =>
       HttpUtil.post('/panel/api/clients/groups/create', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
+    onSuccess: (msg) => {
+      if (msg?.success) invalidate();
+    },
   });
 
   const renameMut = useMutation({
     mutationFn: (body: { oldName: string; newName: string }) =>
       HttpUtil.post('/panel/api/clients/groups/rename', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
+    onSuccess: (msg) => {
+      if (msg?.success) invalidate();
+    },
   });
 
   const deleteMut = useMutation({
     mutationFn: (body: { name: string }) =>
       HttpUtil.post('/panel/api/clients/groups/delete', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
+    onSuccess: (msg) => {
+      if (msg?.success) invalidate();
+    },
   });
 
   const groupResetMut = useMutation({
     mutationFn: (body: { name: string }) =>
       HttpUtil.post('/panel/api/clients/groups/resetTraffic', body, JSON_HEADERS),
-    onSuccess: (msg) => { if (msg?.success) invalidate(); },
+    onSuccess: (msg) => {
+      if (msg?.success) invalidate();
+    },
   });
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -168,14 +184,8 @@ export default function GroupsPage() {
     () => groups.reduce((acc, g) => acc + (g.trafficUsed || 0), 0),
     [groups],
   );
-  const totalUpload = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.up || 0), 0),
-    [groups],
-  );
-  const totalDownload = useMemo(
-    () => groups.reduce((acc, g) => acc + (g.down || 0), 0),
-    [groups],
-  );
+  const totalUpload = useMemo(() => groups.reduce((acc, g) => acc + (g.up || 0), 0), [groups]);
+  const totalDownload = useMemo(() => groups.reduce((acc, g) => acc + (g.down || 0), 0), [groups]);
 
   function openCreate() {
     setCreateName('');
@@ -209,7 +219,11 @@ export default function GroupsPage() {
       setRenameOpen(false);
       return;
     }
-    if (groups.some((g) => g.name.toLowerCase() === next.toLowerCase() && g.name !== renameTarget.name)) {
+    if (
+      groups.some(
+        (g) => g.name.toLowerCase() === next.toLowerCase() && g.name !== renameTarget.name,
+      )
+    ) {
       messageApi.error(t('pages.groups.renameCollision', { name: next }));
       return;
     }
@@ -305,9 +319,11 @@ export default function GroupsPage() {
             messageApi.success(t('pages.groups.deleteClientsSuccess', { count: ok }));
           } else {
             const firstError = skipped[0]?.reason ?? msg?.msg ?? '';
-            messageApi.warning(firstError
-              ? `${t('pages.groups.deleteClientsMixed', { ok, failed })} — ${firstError}`
-              : t('pages.groups.deleteClientsMixed', { ok, failed }));
+            messageApi.warning(
+              firstError
+                ? `${t('pages.groups.deleteClientsMixed', { ok, failed })} — ${firstError}`
+                : t('pages.groups.deleteClientsMixed', { ok, failed }),
+            );
           }
         }
       },
@@ -338,41 +354,41 @@ export default function GroupsPage() {
     return [
       {
         key: 'subLinks',
-        icon: <LinkOutlined />,
+        icon: <LinkOutlined aria-hidden />,
         label: t('pages.clients.subLinksSelected', { count: row.clientCount || 0 }),
         disabled: !row.clientCount,
         onClick: () => openSubLinksFor(row),
       },
       {
         key: 'adjust',
-        icon: <ClockCircleOutlined />,
+        icon: <ClockCircleOutlined aria-hidden />,
         label: t('pages.clients.adjustSelected', { count: row.clientCount || 0 }),
         disabled: !row.clientCount,
         onClick: () => openAdjustFor(row),
       },
       {
         key: 'reset',
-        icon: <RetweetOutlined />,
+        icon: <RetweetOutlined aria-hidden />,
         label: t('pages.groups.resetTraffic'),
         disabled: !row.clientCount,
         onClick: () => onResetTraffic(row),
       },
       {
         key: 'addClients',
-        icon: <UsergroupAddOutlined />,
+        icon: <UsergroupAddOutlined aria-hidden />,
         label: t('pages.groups.addToGroup'),
         onClick: () => openAddClientsFor(row),
       },
       {
         key: 'rename',
-        icon: <EditOutlined />,
+        icon: <EditOutlined aria-hidden />,
         label: t('pages.groups.rename'),
         onClick: () => openRename(row),
       },
       { type: 'divider' },
       {
         key: 'removeClients',
-        icon: <UsergroupDeleteOutlined />,
+        icon: <UsergroupDeleteOutlined aria-hidden />,
         label: t('pages.groups.removeFromGroup'),
         danger: true,
         disabled: !row.clientCount,
@@ -380,7 +396,7 @@ export default function GroupsPage() {
       },
       {
         key: 'deleteClients',
-        icon: <DeleteOutlined />,
+        icon: <DeleteOutlined aria-hidden />,
         label: t('pages.groups.deleteClients'),
         danger: true,
         disabled: !row.clientCount,
@@ -388,7 +404,7 @@ export default function GroupsPage() {
       },
       {
         key: 'delete',
-        icon: <DeleteOutlined />,
+        icon: <DeleteOutlined aria-hidden />,
         label: t('pages.groups.deleteGroupOnly'),
         danger: true,
         onClick: () => onDelete(row),
@@ -404,10 +420,23 @@ export default function GroupsPage() {
       render: (_v, row) => (
         <Space size={4}>
           <Dropdown trigger={['click']} menu={{ items: rowActions(row) }}>
-            <Button aria-label={t('more')} size="small" type="text" style={{ fontSize: 16 }} icon={<MoreOutlined />} />
+            <Button
+              aria-label={t('more')}
+              size="small"
+              type="text"
+              style={{ fontSize: 16 }}
+              icon={<MoreOutlined aria-hidden />}
+            />
           </Dropdown>
           <Tooltip title={t('pages.groups.rename')}>
-            <Button aria-label={t('pages.groups.rename')} size="small" type="text" style={{ fontSize: 16 }} icon={<EditOutlined />} onClick={() => openRename(row)} />
+            <Button
+              aria-label={t('pages.groups.rename')}
+              size="small"
+              type="text"
+              style={{ fontSize: 16 }}
+              icon={<EditOutlined aria-hidden />}
+              onClick={() => openRename(row)}
+            />
           </Tooltip>
         </Space>
       ),
@@ -416,7 +445,11 @@ export default function GroupsPage() {
       title: t('pages.groups.name'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => <Tag color="geekblue" style={{ margin: 0, fontSize: 13 }}>{name}</Tag>,
+      render: (name: string) => (
+        <Tag color="geekblue" style={{ margin: 0, fontSize: 13 }}>
+          {name}
+        </Tag>
+      ),
     },
     {
       title: t('pages.groups.clientCount'),
@@ -463,7 +496,13 @@ export default function GroupsPage() {
         <AppSidebar />
         <Layout className="content-shell">
           <Layout.Content id="content-layout" className="content-area">
-            <Spin spinning={!fetched} delay={200} description={t('loading')} size="large">
+            <Spin
+              aria-live="off"
+              spinning={!fetched}
+              delay={200}
+              description={t('loading')}
+              size="large"
+            >
               {!fetched ? (
                 <div className="loading-spacer" />
               ) : fetchError ? (
@@ -471,7 +510,11 @@ export default function GroupsPage() {
                   status="error"
                   title={t('somethingWentWrong')}
                   subTitle={fetchError}
-                  extra={<Button type="primary" loading={loading} onClick={() => groupsQuery.refetch()}>{t('refresh')}</Button>}
+                  extra={
+                    <Button type="primary" loading={loading} onClick={() => groupsQuery.refetch()}>
+                      {t('refresh')}
+                    </Button>
+                  }
                 />
               ) : (
                 <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 12]}>
@@ -482,14 +525,14 @@ export default function GroupsPage() {
                           <Statistic
                             title={t('pages.groups.totalGroups')}
                             value={String(totalGroups)}
-                            prefix={<TagsOutlined />}
+                            prefix={<TagsOutlined aria-hidden />}
                           />
                         </Col>
                         <Col xs={12} sm={12} md={6}>
                           <Statistic
                             title={t('pages.groups.totalGroupedClients')}
                             value={String(totalClients)}
-                            prefix={<TeamOutlined />}
+                            prefix={<TeamOutlined aria-hidden />}
                           />
                         </Col>
                         <Col xs={12} sm={12} md={6}>
@@ -498,9 +541,11 @@ export default function GroupsPage() {
                             value={0}
                             formatter={() => (
                               <span>
-                                <ArrowUpOutlined /> {SizeFormatter.sizeFormat(totalUpload)}
+                                <ArrowUpOutlined aria-hidden />{' '}
+                                {SizeFormatter.sizeFormat(totalUpload)}
                                 {' / '}
-                                <ArrowDownOutlined /> {SizeFormatter.sizeFormat(totalDownload)}
+                                <ArrowDownOutlined aria-hidden />{' '}
+                                {SizeFormatter.sizeFormat(totalDownload)}
                               </span>
                             )}
                           />
@@ -509,7 +554,7 @@ export default function GroupsPage() {
                           <Statistic
                             title={t('pages.groups.totalTraffic')}
                             value={SizeFormatter.sizeFormat(totalTraffic)}
-                            prefix={<PieChartOutlined />}
+                            prefix={<PieChartOutlined aria-hidden />}
                           />
                         </Col>
                       </Row>
@@ -522,7 +567,12 @@ export default function GroupsPage() {
                       hoverable
                       title={
                         <div className="card-toolbar">
-                          <Button aria-label={t('pages.groups.addGroup')} type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                          <Button
+                            aria-label={t('pages.groups.addGroup')}
+                            type="primary"
+                            icon={<PlusOutlined aria-hidden />}
+                            onClick={openCreate}
+                          >
                             {!isMobile && t('pages.groups.addGroup')}
                           </Button>
                         </div>
@@ -538,7 +588,7 @@ export default function GroupsPage() {
                         locale={{
                           emptyText: (
                             <div className="card-empty">
-                              <TagsOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+                              <TagsOutlined aria-hidden style={{ fontSize: 32, marginBottom: 8 }} />
                               <div>{t('noData')}</div>
                             </div>
                           ),
@@ -563,8 +613,9 @@ export default function GroupsPage() {
           destroyOnHidden
         >
           <Form layout="vertical">
-            <Form.Item label={t('pages.groups.name')}>
+            <Form.Item label={t('pages.groups.name')} htmlFor={`${uid}-create-name`}>
               <Input
+                id={`${uid}-create-name`}
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
                 onPressEnter={confirmCreate}
@@ -586,8 +637,9 @@ export default function GroupsPage() {
           destroyOnHidden
         >
           <Form layout="vertical">
-            <Form.Item label={t('pages.groups.name')}>
+            <Form.Item label={t('pages.groups.name')} htmlFor={`${uid}-rename-name`}>
               <Input
+                id={`${uid}-rename-name`}
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onPressEnter={confirmRename}
@@ -613,8 +665,8 @@ export default function GroupsPage() {
             open={adjustOpen}
             count={groupEmails.length}
             onOpenChange={setAdjustOpen}
-            onSubmit={async (addDays, addBytes) => {
-              const msg = await bulkAdjust(groupEmails, addDays, addBytes);
+            onSubmit={async (addDays, addBytes, flow, limitHwid, adTag) => {
+              const msg = await bulkAdjust(groupEmails, addDays, addBytes, flow, limitHwid, adTag);
               if (msg?.success) {
                 const obj = msg.obj ?? { adjusted: 0 };
                 messageApi.success(

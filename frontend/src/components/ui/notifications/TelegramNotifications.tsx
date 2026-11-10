@@ -1,5 +1,11 @@
 import { InputNumber } from 'antd';
-import { CloudServerOutlined, ThunderboltOutlined, DesktopOutlined, DashboardOutlined, SafetyOutlined } from '@ant-design/icons';
+import {
+  CloudServerOutlined,
+  ThunderboltOutlined,
+  DesktopOutlined,
+  DashboardOutlined,
+  SafetyOutlined,
+} from '@ant-design/icons';
 import type { AllSetting } from '@/models/setting';
 import { NotificationLayout } from './NotificationLayout';
 import { NotificationGroup } from './NotificationGroup';
@@ -7,37 +13,60 @@ import type { NotificationGroupConfig } from './types';
 
 const GROUPS: NotificationGroupConfig[] = [
   {
-    icon: <CloudServerOutlined />,
+    icon: <CloudServerOutlined aria-hidden />,
     title: 'eventGroupOutbound',
     events: [
       {
         key: 'outbound.down',
         label: 'eventOutboundDown',
         settingKey: 'outboundDownThreshold',
+        hint: 'eventDownThresholdHint',
         extra: ({ value, onChange, ariaLabel }) => (
-          <InputNumber size="small" min={1} max={100} value={value} onChange={onChange} aria-label={ariaLabel} style={{ width: 80 }} />
+          <InputNumber
+            size="small"
+            min={1}
+            max={100}
+            value={value}
+            onChange={onChange}
+            aria-label={ariaLabel}
+            style={{ width: 80 }}
+          />
         ),
       },
       { key: 'outbound.up', label: 'eventOutboundUp', settingKey: '' },
     ],
   },
   {
-    icon: <ThunderboltOutlined />,
+    icon: <ThunderboltOutlined aria-hidden />,
     title: 'eventGroupXray',
-    events: [
-      { key: 'xray.crash', label: 'eventXrayCrash', settingKey: '' },
-    ],
+    events: [{ key: 'xray.crash', label: 'eventXrayCrash', settingKey: '' }],
   },
   {
-    icon: <DesktopOutlined />,
+    icon: <DesktopOutlined aria-hidden />,
     title: 'eventGroupNode',
     events: [
-      { key: 'node.down', label: 'eventNodeDown', settingKey: '' },
+      {
+        key: 'node.down',
+        label: 'eventNodeDown',
+        settingKey: 'nodeDownThreshold',
+        hint: 'eventDownThresholdHint',
+        extra: ({ value, onChange, ariaLabel }) => (
+          <InputNumber
+            size="small"
+            min={1}
+            max={100}
+            value={value}
+            onChange={onChange}
+            aria-label={ariaLabel}
+            style={{ width: 80 }}
+          />
+        ),
+      },
       { key: 'node.up', label: 'eventNodeUp', settingKey: '' },
     ],
   },
   {
-    icon: <DashboardOutlined />,
+    icon: <DashboardOutlined aria-hidden />,
     title: 'eventGroupSystem',
     events: [
       {
@@ -45,7 +74,15 @@ const GROUPS: NotificationGroupConfig[] = [
         label: 'eventCPUHigh',
         settingKey: 'tgCpu',
         extra: ({ value, onChange, ariaLabel }) => (
-          <InputNumber size="small" min={0} max={100} value={value} onChange={onChange} aria-label={ariaLabel} style={{ width: 80 }} />
+          <InputNumber
+            size="small"
+            min={0}
+            max={100}
+            value={value}
+            onChange={onChange}
+            aria-label={ariaLabel}
+            style={{ width: 80 }}
+          />
         ),
       },
       {
@@ -53,17 +90,23 @@ const GROUPS: NotificationGroupConfig[] = [
         label: 'eventMemoryHigh',
         settingKey: 'tgMemory',
         extra: ({ value, onChange, ariaLabel }) => (
-          <InputNumber size="small" min={0} max={100} value={value} onChange={onChange} aria-label={ariaLabel} style={{ width: 80 }} />
+          <InputNumber
+            size="small"
+            min={0}
+            max={100}
+            value={value}
+            onChange={onChange}
+            aria-label={ariaLabel}
+            style={{ width: 80 }}
+          />
         ),
       },
     ],
   },
   {
-    icon: <SafetyOutlined />,
+    icon: <SafetyOutlined aria-hidden />,
     title: 'eventGroupSecurity',
-    events: [
-      { key: 'login.attempt', label: 'eventLoginAttempt', settingKey: '' },
-    ],
+    events: [{ key: 'login.attempt', label: 'eventLoginAttempt', settingKey: '' }],
   },
 ];
 
@@ -74,12 +117,15 @@ interface Props {
 
 export function TelegramNotifications({ allSetting, updateSetting }: Props) {
   const events = allSetting.tgEnabledEvents || '';
-  const selected = events ? events.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const selected = events
+    ? events
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
 
   function toggle(key: string) {
-    const next = selected.includes(key)
-      ? selected.filter((e) => e !== key)
-      : [...selected, key];
+    const next = selected.includes(key) ? selected.filter((e) => e !== key) : [...selected, key];
     updateSetting({ tgEnabledEvents: next.join(',') });
   }
 

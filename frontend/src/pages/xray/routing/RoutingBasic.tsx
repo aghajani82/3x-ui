@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Select, Switch } from 'antd';
 
+import { selectTagRender } from '@/components/form';
 import { SettingListItem } from '@/components/ui';
 import type { XraySettingsValue, SetTemplate } from '@/hooks/useXraySetting';
 import {
@@ -13,7 +14,13 @@ import {
   directSettings,
   ipv4Settings,
 } from '../basics/constants';
-import { getDefaultOutboundTag, ruleGetter, ruleSetter, setDefaultOutboundTag, syncOutbound } from '../basics/helpers';
+import {
+  getDefaultOutboundTag,
+  ruleGetter,
+  ruleSetter,
+  setDefaultOutboundTag,
+  syncOutbound,
+} from '../basics/helpers';
 
 interface RoutingBasicProps {
   templateSettings: XraySettingsValue | null;
@@ -81,12 +88,14 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Switch
             checked={torrentActive}
-            onChange={(checked) => mutate((tt) => {
-              const next = checked
-                ? [...blockedProtocols, ...BITTORRENT_PROTOCOLS]
-                : blockedProtocols.filter((d) => !BITTORRENT_PROTOCOLS.includes(d));
-              ruleSetter(tt, 'blocked', 'protocol', next);
-            })}
+            onChange={(checked) =>
+              mutate((tt) => {
+                const next = checked
+                  ? [...blockedProtocols, ...BITTORRENT_PROTOCOLS]
+                  : blockedProtocols.filter((d) => !BITTORRENT_PROTOCOLS.includes(d));
+                ruleSetter(tt, 'blocked', 'protocol', next);
+              })
+            }
           />
         }
       />
@@ -97,6 +106,7 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Select
             mode="tags"
+            tagRender={selectTagRender}
             value={blockedIPs}
             style={{ width: '100%' }}
             options={IPS_OPTIONS}
@@ -111,6 +121,7 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Select
             mode="tags"
+            tagRender={selectTagRender}
             value={blockedDomains}
             style={{ width: '100%' }}
             options={BLOCK_DOMAINS_OPTIONS}
@@ -132,13 +143,16 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Select
             mode="tags"
+            tagRender={selectTagRender}
             value={directIPs}
             style={{ width: '100%' }}
             options={IPS_OPTIONS}
-            onChange={(v) => mutate((tt) => {
-              ruleSetter(tt, 'direct', 'ip', v);
-              syncOutbound(tt, 'direct', directSettings);
-            })}
+            onChange={(v) =>
+              mutate((tt) => {
+                ruleSetter(tt, 'direct', 'ip', v);
+                syncOutbound(tt, 'direct', directSettings);
+              })
+            }
           />
         }
       />
@@ -149,13 +163,16 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Select
             mode="tags"
+            tagRender={selectTagRender}
             value={directDomains}
             style={{ width: '100%' }}
             options={DOMAINS_OPTIONS}
-            onChange={(v) => mutate((tt) => {
-              ruleSetter(tt, 'direct', 'domain', v);
-              syncOutbound(tt, 'direct', directSettings);
-            })}
+            onChange={(v) =>
+              mutate((tt) => {
+                ruleSetter(tt, 'direct', 'domain', v);
+                syncOutbound(tt, 'direct', directSettings);
+              })
+            }
           />
         }
       />
@@ -167,13 +184,16 @@ export default function RoutingBasic({ templateSettings, setTemplateSettings }: 
         control={
           <Select
             mode="tags"
+            tagRender={selectTagRender}
             value={ipv4Domains}
             style={{ width: '100%' }}
             options={SERVICES_OPTIONS}
-            onChange={(v) => mutate((tt) => {
-              ruleSetter(tt, 'IPv4', 'domain', v);
-              syncOutbound(tt, 'IPv4', ipv4Settings);
-            })}
+            onChange={(v) =>
+              mutate((tt) => {
+                ruleSetter(tt, 'IPv4', 'domain', v);
+                syncOutbound(tt, 'IPv4', ipv4Settings);
+              })
+            }
           />
         }
       />

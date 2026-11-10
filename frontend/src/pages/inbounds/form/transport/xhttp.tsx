@@ -1,5 +1,6 @@
+import { NativeSelect } from '@/components/form/NativeSelect';
 import { useTranslation } from 'react-i18next';
-import { AutoComplete, Input, InputNumber, Select, Switch } from 'antd';
+import { AutoComplete, Input, InputNumber, Switch } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { HeaderMapEditor } from '@/components/form';
@@ -22,12 +23,29 @@ function antdValidatorToRhf(fn: (rule: unknown, value: unknown) => Promise<void>
 export default function XhttpForm() {
   const { t } = useTranslation();
   const { control, getValues, setValue } = useFormContext();
-  const xhttpMode = useWatch({ control, name: 'streamSettings.xhttpSettings.mode' }) as string | undefined;
-  const xhttpObfsMode = !!useWatch({ control, name: 'streamSettings.xhttpSettings.xPaddingObfsMode' });
-  const xhttpSessionIDPlacement = useWatch({ control, name: 'streamSettings.xhttpSettings.sessionIDPlacement' }) as string | undefined;
-  const xhttpSessionIDTable = useWatch({ control, name: 'streamSettings.xhttpSettings.sessionIDTable' });
-  const xhttpSeqPlacement = useWatch({ control, name: 'streamSettings.xhttpSettings.seqPlacement' }) as string | undefined;
-  const xhttpUplinkPlacement = useWatch({ control, name: 'streamSettings.xhttpSettings.uplinkDataPlacement' }) as string | undefined;
+  const xhttpMode = useWatch({ control, name: 'streamSettings.xhttpSettings.mode' }) as
+    | string
+    | undefined;
+  const xhttpObfsMode = !!useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.xPaddingObfsMode',
+  });
+  const xhttpSessionIDPlacement = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.sessionIDPlacement',
+  }) as string | undefined;
+  const xhttpSessionIDTable = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.sessionIDTable',
+  });
+  const xhttpSeqPlacement = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.seqPlacement',
+  }) as string | undefined;
+  const xhttpUplinkPlacement = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.uplinkDataPlacement',
+  }) as string | undefined;
   const enableXmux = !!useWatch({ control, name: 'streamSettings.xhttpSettings.enableXmux' });
 
   function onXmuxToggle(checked: boolean) {
@@ -60,8 +78,11 @@ export default function XhttpForm() {
       <FormField name={['streamSettings', 'xhttpSettings', 'path']} label={t('path')}>
         <Input />
       </FormField>
-      <FormField name={['streamSettings', 'xhttpSettings', 'mode']} label={t('pages.inbounds.info.mode')}>
-        <Select
+      <FormField
+        name={['streamSettings', 'xhttpSettings', 'mode']}
+        label={t('pages.inbounds.info.mode')}
+      >
+        <NativeSelect
           style={{ width: '50%' }}
           options={(['auto', 'packet-up', 'stream-up', 'stream-one'] as const).map((m) => ({
             value: m,
@@ -129,7 +150,7 @@ export default function XhttpForm() {
         name={['streamSettings', 'xhttpSettings', 'uplinkHTTPMethod']}
         label={t('pages.inbounds.form.uplinkHttpMethod')}
       >
-        <Select
+        <NativeSelect
           options={[
             { value: '', label: 'Default (POST)' },
             { value: 'POST', label: 'POST' },
@@ -167,7 +188,7 @@ export default function XhttpForm() {
             name={['streamSettings', 'xhttpSettings', 'xPaddingPlacement']}
             label={t('pages.inbounds.form.paddingPlacement')}
           >
-            <Select
+            <NativeSelect
               options={[
                 { value: '', label: 'Default (queryInHeader)' },
                 { value: 'queryInHeader', label: 'queryInHeader' },
@@ -181,7 +202,7 @@ export default function XhttpForm() {
             name={['streamSettings', 'xhttpSettings', 'xPaddingMethod']}
             label={t('pages.inbounds.form.paddingMethod')}
           >
-            <Select
+            <NativeSelect
               options={[
                 { value: '', label: 'Default (repeat-x)' },
                 { value: 'repeat-x', label: 'repeat-x' },
@@ -195,7 +216,7 @@ export default function XhttpForm() {
         name={['streamSettings', 'xhttpSettings', 'sessionIDPlacement']}
         label={t('pages.inbounds.form.sessionPlacement')}
       >
-        <Select
+        <NativeSelect
           options={[
             { value: '', label: 'Default (path)' },
             { value: 'path', label: 'path' },
@@ -239,7 +260,7 @@ export default function XhttpForm() {
         name={['streamSettings', 'xhttpSettings', 'seqPlacement']}
         label={t('pages.inbounds.form.sequencePlacement')}
       >
-        <Select
+        <NativeSelect
           options={[
             { value: '', label: 'Default (path)' },
             { value: 'path', label: 'path' },
@@ -263,7 +284,7 @@ export default function XhttpForm() {
             name={['streamSettings', 'xhttpSettings', 'uplinkDataPlacement']}
             label={t('pages.inbounds.form.uplinkDataPlacement')}
           >
-            <Select
+            <NativeSelect
               options={[
                 { value: '', label: 'Default (auto)' },
                 { value: 'auto', label: 'auto' },

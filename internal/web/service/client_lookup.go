@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
@@ -104,6 +105,17 @@ func (s *ClientService) GetInboundIdsForEmail(tx *gorm.DB, email string) ([]int,
 	return ids, nil
 }
 
+// sub_id carries a plain index, not a unique one: one subscription can cover
+// several clients, so callers acting on a subId must handle all of them.
+func (s *ClientService) GetRecordsBySubID(subId string) ([]*model.ClientRecord, error) {
+	if subId == "" {
+		return nil, errors.New("sub_id must not be empty")
+	}
+	var rows []*model.ClientRecord
+	err := database.GetDB().Where("sub_id = ?", subId).Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
 func (s *ClientService) GetRecordsByTgID(tgId int64) ([]*model.ClientRecord, error) {
 	if tgId <= 0 {
 		return nil, errors.New("tg_id must be a positive integer")
@@ -131,6 +143,41 @@ func (s *ClientService) GetInboundIdsForRecord(id int) ([]int, error) {
 		return nil, err
 	}
 	return ids, nil
+}
+
+// TunnelAllowedIPsByInbound returns, for each given WireGuard/AmneziaWG
+// inbound id, the real AllowedIPs this email currently has on that specific
+// inbound's own settings JSON -- joined comma-separated, matching the form
+// value shape a single AllowedIPs field already uses. Non-tunnel inbounds
+// and ids the email isn't actually attached to are simply absent from the
+// result (not an error): callers use this to seed a per-protocol display
+// field, and ClientRecord's own single AllowedIPs column can't tell two
+// different protocol addresses apart, which is exactly the gap this closes.
+func (s *ClientService) TunnelAllowedIPsByInbound(inboundSvc *InboundService, email string, inboundIds []int) (map[int]string, error) {
+	result := make(map[int]string, len(inboundIds))
+	for _, ibId := range inboundIds {
+		inbound, err := inboundSvc.GetInbound(ibId)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if inbound.Protocol != model.WireGuard && inbound.Protocol != model.AmneziaWG {
+			continue
+		}
+		clients, err := inboundSvc.GetClients(inbound)
+		if err != nil {
+			return nil, err
+		}
+		for i := range clients {
+			if strings.EqualFold(clients[i].Email, email) {
+				result[ibId] = strings.Join(clients[i].AllowedIPs, ",")
+				break
+			}
+		}
+	}
+	return result, nil
 }
 
 func (s *ClientService) List() ([]ClientWithAttachments, error) {
@@ -201,14 +248,26 @@ func (s *ClientService) HasPendingNode(inboundSvc *InboundService, email string)
 	return inboundSvc.AnyNodePending(ids)
 }
 
+const settingsProbeBytes = 64
+
 // findInboundIdsByClientEmail returns every inbound whose settings.clients[]
 // JSON contains an entry with the given email. Driver-portable (no JSON
 // operators) by parsing in Go — fine for the rare fallback path.
 func (s *ClientService) findInboundIdsByClientEmail(email string) ([]int, error) {
+	// A literal, bounded probe: the email comes from a request, and LIKE costs the settings
+	// length times the pattern length; the exact match below decides.
+	probe := email
+	if len(probe) > settingsProbeBytes {
+		cut := settingsProbeBytes
+		for cut > 0 && !utf8.RuneStart(probe[cut]) {
+			cut--
+		}
+		probe = probe[:cut]
+	}
 	var inbounds []model.Inbound
 	if err := database.GetDB().
 		Select("id, settings").
-		Where("settings LIKE ?", "%"+email+"%").
+		Where("settings LIKE ? ESCAPE '\\'", "%"+escapeLikeLiteral(probe)+"%").
 		Find(&inbounds).Error; err != nil {
 		return nil, err
 	}
@@ -234,4 +293,26 @@ func (s *ClientService) findInboundIdsByClientEmail(email string) ([]int, error)
 		}
 	}
 	return out, nil
+}
+
+// clientRecordsByEmail batch-loads client rows for emails, keyed by email.
+// Callers pass an already-deduplicated list; absent addresses are simply
+// missing from the map.
+func clientRecordsByEmail(tx *gorm.DB, emails []string) (map[string]*model.ClientRecord, error) {
+	if tx == nil {
+		tx = database.GetDB()
+	}
+	var records []model.ClientRecord
+	for _, batch := range chunkStrings(emails, sqlInChunk) {
+		var rows []model.ClientRecord
+		if err := tx.Where("email IN ?", batch).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		records = append(records, rows...)
+	}
+	byEmail := make(map[string]*model.ClientRecord, len(records))
+	for i := range records {
+		byEmail[records[i].Email] = &records[i]
+	}
+	return byEmail, nil
 }

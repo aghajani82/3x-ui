@@ -14,11 +14,11 @@ list, and multi-node sync — so once it is set, everything downstream just work
 Open an inbound → **Transport / Stream Settings** → enable **Sockopt** → use the
 **Real client IP** preset selector:
 
-| Preset | What it does | Use for |
-|---|---|---|
-| **Off / direct** | Clears both fields. | Inbound reachable directly by clients. |
-| **Cloudflare CDN** | Sets `sockopt.trustedXForwardedFor = ["CF-Connecting-IP"]`. | WebSocket / HTTPUpgrade / XHTTP behind Cloudflare's CDN (orange cloud). |
-| **L4 relay / Spectrum (PROXY)** | Sets `acceptProxyProtocol = true`. | An L4 tunnel/relay in front, or Cloudflare **Spectrum**. |
+| Preset                          | What it does                                                | Use for                                                                 |
+| ------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Off / direct**                | Clears both fields.                                         | Inbound reachable directly by clients.                                  |
+| **Cloudflare CDN**              | Sets `sockopt.trustedXForwardedFor = ["CF-Connecting-IP"]`. | WebSocket / HTTPUpgrade / XHTTP behind Cloudflare's CDN (orange cloud). |
+| **L4 relay / Spectrum (PROXY)** | Sets `acceptProxyProtocol = true`.                          | An L4 tunnel/relay in front, or Cloudflare **Spectrum**.                |
 
 The raw `Proxy Protocol` switch and `Trusted X-Forwarded-For` list stay visible below the preset
 selector for manual / advanced tuning — the presets just fill them in for you.
@@ -65,16 +65,16 @@ and XHTTP; **not** on mKCP. The front must be configured to send the header, e.g
 
 ## Transport support matrix
 
-| Mechanism | TCP/RAW | mKCP | WebSocket | gRPC | HTTPUpgrade | XHTTP |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `trustedXForwardedFor` (header) | – | – | ✅ | – | ✅ | ✅ |
-| `acceptProxyProtocol` (PROXY)   | ✅ | – | ✅ | ✅ | ✅ | ✅ |
+| Mechanism                       | TCP/RAW | mKCP | WebSocket | gRPC | HTTPUpgrade | XHTTP |
+| ------------------------------- | :-----: | :--: | :-------: | :--: | :---------: | :---: |
+| `trustedXForwardedFor` (header) |    –    |  –   |    ✅     |  –   |     ✅      |  ✅   |
+| `acceptProxyProtocol` (PROXY)   |   ✅    |  –   |    ✅     |  ✅  |     ✅      |  ✅   |
 
 The form shows a warning when you select a preset that the current transport cannot honor.
 
 > **Use one, not both.** `acceptProxyProtocol` and `trustedXForwardedFor` are independent — the
 > first reads the real IP from the L4 PROXY header, the second from an HTTP request header. On
-> WebSocket / HTTPUpgrade / XHTTP, xray applies the HTTP header *last*, so a stale
+> WebSocket / HTTPUpgrade / XHTTP, xray applies the HTTP header _last_, so a stale
 > `trustedXForwardedFor` would override (and defeat) a PROXY-protocol setup. The presets are
 > mutually exclusive and clear the other field for you; only mix them by hand if you know your
 > upstream chain needs it.
@@ -85,6 +85,12 @@ No extra configuration is needed. The inbound's `streamSettings` (including thes
 fields) is pushed to child nodes verbatim, so the node's Xray records the real IP, and the
 parent panel pulls each node's per-client IPs roughly every 10 seconds. The real visitor IP
 shows up on the parent automatically.
+
+Reports retain each address's newest timestamp within the 30-minute retention window.
+Flat and per-node IP blobs use a stable timestamp-ascending order, with IP text breaking
+ties, so equivalent reports preserve the same bytes and skip redundant writes. Flat-row
+merges use compare-and-set retries to preserve concurrent observations; advancing a
+timestamp remains a real change. GUID attribution stays separate from the flat union.
 
 ## Security note
 

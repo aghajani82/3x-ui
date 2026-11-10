@@ -31,11 +31,19 @@ lint-go: dist-stub ## golangci-lint on Go sources
 	golangci-lint run
 
 .PHONY: lint-fe
-lint-fe: ## ESLint on frontend sources
+lint-fe: ## oxlint on frontend sources
 	cd $(FRONTEND) && npm run lint
+
+.PHONY: audit-fe
+audit-fe: ## Audit the frontend's production dependencies (needs the network)
+	cd $(FRONTEND) && npm run audit
 
 .PHONY: lint
 lint: lint-go lint-fe ## All linters
+
+.PHONY: format-check
+format-check: ## oxfmt in check mode on frontend sources
+	cd $(FRONTEND) && npm run format:check
 
 .PHONY: typecheck
 typecheck: ## tsc --noEmit
@@ -46,8 +54,16 @@ test-go: dist-stub ## Go tests (shuffle, no cache)
 	go test -shuffle=on -count=1 $(GO_PKGS)
 
 .PHONY: race
+# internal/web/service runs ~10x slower under -race and overruns go test's 10m default.
 race: dist-stub ## Go tests with the race detector (needs a C compiler)
-	go test -race -shuffle=on -count=1 $(GO_PKGS)
+	go test -race -shuffle=on -count=1 -timeout 25m $(GO_PKGS)
+
+.PHONY: node-e2e
+# Two real panel processes (master + node); test-go only runs nodee2e as a skip.
+NODE_E2E_BIN = $(CURDIR)/.cache/node-e2e/x-ui$(shell go env GOEXE)
+node-e2e: dist-stub ## Master+node sync end to end with two real panel processes
+	go build -o $(NODE_E2E_BIN) .
+	XUI_NODE_E2E_BINARY=$(NODE_E2E_BIN) go test -count=1 -timeout 20m -v ./internal/nodee2e/
 
 .PHONY: test-fe
 test-fe: ## Frontend tests (vitest)
@@ -59,6 +75,10 @@ test: test-go test-fe ## All tests
 .PHONY: vulncheck
 vulncheck: dist-stub ## govulncheck
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+.PHONY: docs-openapi-check
+docs-openapi-check: ## Fail if the docs OpenAPI spec is not the panel's
+	cmp frontend/public/openapi.json docs/public/openapi.json
 
 .PHONY: build-fe
 build-fe: ## Build the Vite bundles into internal/web/dist
@@ -72,8 +92,11 @@ build: build-fe ## Build the frontend then the Go binary
 build-storybook: ## Build the static Storybook (compile-checks all stories)
 	cd $(FRONTEND) && npm run build-storybook
 
-# The PR gate. Matches ci.yml: codegen freshness, both linters, typecheck,
-# both test suites, a full build, and the Storybook compile-check.
+# The PR gate. Matches ci.yml: codegen freshness, both linters, the formatter,
+# typecheck, both test suites, a full build, the Storybook compile-check and the
+# docs spec check. The dependency audit is a separate target: it needs the
+# network and a live advisory database, so an unchanged commit could pass today
+# and fail tomorrow.
 .PHONY: verify
-verify: gen-check lint typecheck test build build-storybook ## Full local gate (mirrors CI)
+verify: gen-check lint format-check typecheck test build build-storybook docs-openapi-check ## Full local gate (mirrors CI)
 	@echo "verify: OK"

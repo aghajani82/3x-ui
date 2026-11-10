@@ -196,6 +196,15 @@ func TestWireInboundCarriesDisableFlow(t *testing.T) {
 	}
 }
 
+func TestWireInboundCarriesExcludeFromSub(t *testing.T) {
+	if got := wireInbound(&model.Inbound{ExcludeFromSub: true}, 0).Get("excludeFromSub"); got != "true" {
+		t.Fatalf("excludeFromSub = %q, want true", got)
+	}
+	if got := wireInbound(&model.Inbound{}, 0).Get("excludeFromSub"); got != "false" {
+		t.Fatalf("excludeFromSub = %q, want false", got)
+	}
+}
+
 func TestRemoteHTTPClientEgressProxy(t *testing.T) {
 	// OutboundTag + a resolver → a dedicated proxy client (not the shared default).
 	withTag := NewRemote(&model.Node{Id: 1, Scheme: "https", TlsVerifyMode: "verify", OutboundTag: "warp"}, stubEgress{url: "socks5://127.0.0.1:1080"})
@@ -438,5 +447,124 @@ func TestSanitizeStreamSettingsForRemote(t *testing.T) {
 				t.Errorf("keyFile present=%v, want %v", hasKeyFile, tc.wantKeyFile)
 			}
 		})
+	}
+}
+
+// refreshRemoteIDs rebuilds the cache from node-reported tags only, so an
+// adopted alias must be re-applied or every later op on that inbound misses.
+func TestRemoteAdoptedAliasSurvivesRefresh(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if req.URL.Path == "/panel/api/inbounds/list" {
+			_, _ = w.Write([]byte(`{"success":true,"obj":[{"id":5,"tag":"legacy-in"},{"id":6,"tag":"in-2"}]}`))
+			return
+		}
+		http.NotFound(w, req)
+	}))
+	defer srv.Close()
+
+	r := NewRemote(nodeForPlainServer(t, srv, "verify", "tok"), nil)
+	central := &model.Inbound{Tag: "central-in", Settings: `{"clients":[]}`}
+	r.AdoptInboundAlias(central, RemoteInboundOption{Id: 5, Tag: "legacy-in"})
+
+	// Resolving a different tag misses the cache and forces a full refresh.
+	if _, err := r.resolveRemoteID(context.Background(), "in-2"); err != nil {
+		t.Fatalf("resolveRemoteID(in-2): %v", err)
+	}
+
+	id, err := r.resolveRemoteID(context.Background(), central.Tag)
+	if err != nil {
+		t.Fatalf("resolveRemoteID(%s) after refresh: %v", central.Tag, err)
+	}
+	if id != 5 {
+		t.Fatalf("adopted alias resolved to %d, want 5", id)
+	}
+}
+
+// A stale alias must never outrank the node's own report: once the node lists
+// an inbound under the central tag itself, that id is the authoritative one.
+func TestRemoteAdoptedAliasYieldsToNodeReportedTag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if req.URL.Path == "/panel/api/inbounds/list" {
+			_, _ = w.Write([]byte(`{"success":true,"obj":[{"id":5,"tag":"central-in"},{"id":7,"tag":"legacy-in"},{"id":9,"tag":"in-2"}]}`))
+			return
+		}
+		http.NotFound(w, req)
+	}))
+	defer srv.Close()
+
+	r := NewRemote(nodeForPlainServer(t, srv, "verify", "tok"), nil)
+	central := &model.Inbound{Tag: "central-in", Settings: `{"clients":[]}`}
+	r.AdoptInboundAlias(central, RemoteInboundOption{Id: 7, Tag: "legacy-in"})
+
+	if _, err := r.resolveRemoteID(context.Background(), "in-2"); err != nil {
+		t.Fatalf("resolveRemoteID(in-2): %v", err)
+	}
+
+	id, err := r.resolveRemoteID(context.Background(), central.Tag)
+	if err != nil {
+		t.Fatalf("resolveRemoteID(%s): %v", central.Tag, err)
+	}
+	if id != 5 {
+		t.Fatalf("central tag resolved to %d via a stale alias, want 5 (the id the node reports)", id)
+	}
+}
+
+// A node's success=false message becomes an error the master logs and stores as the
+// node's lastError; it must not carry the whole response body there.
+func TestRemoteDo_BoundsTheNodeErrorMessage(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":false,"msg":"` + strings.Repeat("m", 1<<20) + `"}`))
+	}))
+	defer srv.Close()
+	r := NewRemote(nodeForServer(t, srv, "skip", ""), nil)
+	_, err := r.do(context.Background(), http.MethodGet, "/probe", nil)
+	if err == nil || len(err.Error()) > errBodyDiagBytes+64 {
+		t.Fatalf("error = %d bytes, want at most the %d-byte diagnostic", len(err.Error()), errBodyDiagBytes)
+	}
+}
+
+// Each "{}" of a node-reported list decodes into a whole struct, so a body under the
+// byte cap could still expand into gigabytes; lists are capped by entry count.
+func TestRemoteNodeListsAreCappedByEntryCount(t *testing.T) {
+	descendants := "[" + strings.TrimSuffix(strings.Repeat("{},", maxNodeDescendants+1), ",") + "]"
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"obj":` + descendants + `}`))
+	}))
+	defer srv.Close()
+	r := NewRemote(nodeForServer(t, srv, "skip", ""), nil)
+	if got, err := r.GetDescendants(context.Background()); !errors.Is(err, errRemoteListTooLong) {
+		t.Fatalf("GetDescendants = %d entries, %v; want errRemoteListTooLong", len(got), err)
+	}
+}
+
+// A node rotating inbound tags must not grow the per-tag maps forever: an inbound the
+// master swept leaves nothing behind in either tag form, its adopted alias included.
+func TestRemoteForgetInboundDropsEveryTrace(t *testing.T) {
+	n := &model.Node{Id: 7, Name: "n"}
+	r := NewRemote(n, nil)
+	ib := &model.Inbound{Tag: "n7-in-443", Port: 443, Protocol: model.VLESS}
+	r.AdoptInboundAlias(ib, RemoteInboundOption{Id: 3, Tag: "in-443"})
+	r.RecordAdoptedInbound(&model.Inbound{Tag: "in-443", Port: 443, Protocol: model.VLESS})
+	r.ForgetInbound("in-443")
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.pushedFP)+len(r.remoteIDByTag)+len(r.adoptedAliases) != 0 {
+		t.Fatalf("left behind: pushedFP=%v ids=%v aliases=%v", r.pushedFP, r.remoteIDByTag, r.adoptedAliases)
+	}
+}
+
+// The cap is documented in JSON values; counting keys and closing brackets as well refused a
+// node's whole online report at well under the stated number of values.
+func TestDecodeCappedValuesCountsValuesOnly(t *testing.T) {
+	var got map[string][]string
+	// One object, two arrays and three strings: six values, though fourteen tokens.
+	raw := json.RawMessage(`{"guid-a":["x","y"],"guid-b":["z"]}`)
+	if err := decodeCappedValues(raw, &got, 6); err != nil {
+		t.Fatalf("six values under a cap of six: %v", err)
+	}
+	if err := decodeCappedValues(raw, &got, 5); !errors.Is(err, errRemoteListTooLong) {
+		t.Fatalf("six values under a cap of five: err = %v, want errRemoteListTooLong", err)
 	}
 }

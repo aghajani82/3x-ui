@@ -1,5 +1,7 @@
+import { NativeSelect } from '@/components/form/NativeSelect';
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Form, Input, InputNumber, Select, Switch } from 'antd';
+import { Form, Input, InputNumber, Switch } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { HeaderMapEditor } from '@/components/form';
@@ -9,13 +11,15 @@ const MASQ_PATH = ['streamSettings', 'hysteriaSettings', 'masquerade'];
 
 export default function HysteriaFields() {
   const { t } = useTranslation();
+  const uid = useId();
   const { control, setValue } = useFormContext();
   const masq = useWatch({ control, name: 'streamSettings.hysteriaSettings.masquerade' }) as
     | { type?: string }
     | undefined;
-  const masqType = useWatch({ control, name: 'streamSettings.hysteriaSettings.masquerade.type' }) as
-    | string
-    | undefined;
+  const masqType = useWatch({
+    control,
+    name: 'streamSettings.hysteriaSettings.masquerade.type',
+  }) as string | undefined;
   return (
     <>
       <FormField
@@ -31,18 +35,24 @@ export default function HysteriaFields() {
         <InputNumber min={2} max={600} style={{ width: '100%' }} />
       </FormField>
 
-      <Form.Item label={t('pages.inbounds.form.masquerade')}>
+      <Form.Item htmlFor={`${uid}-masquerade`} label={t('pages.inbounds.form.masquerade')}>
         <Switch
+          id={`${uid}-masquerade`}
           checked={!!masq}
           onChange={(checked) =>
             setValue(
               'streamSettings.hysteriaSettings.masquerade',
               checked
                 ? {
-                  type: '', dir: '', url: '',
-                  rewriteHost: false, insecure: false,
-                  content: '', headers: {}, statusCode: 0,
-                }
+                    type: '',
+                    dir: '',
+                    url: '',
+                    rewriteHost: false,
+                    insecure: false,
+                    content: '',
+                    headers: {},
+                    statusCode: 0,
+                  }
                 : undefined,
             )
           }
@@ -50,11 +60,8 @@ export default function HysteriaFields() {
       </Form.Item>
       {masq && (
         <>
-          <FormField
-            label={t('pages.inbounds.form.type')}
-            name={[...MASQ_PATH, 'type']}
-          >
-            <Select
+          <FormField label={t('pages.inbounds.form.type')} name={[...MASQ_PATH, 'type']}>
+            <NativeSelect
               options={[
                 { value: '', label: 'default (404 page)' },
                 { value: 'proxy', label: 'proxy (reverse proxy)' },
@@ -65,15 +72,19 @@ export default function HysteriaFields() {
           </FormField>
           {masqType === 'proxy' && (
             <>
-              <FormField
-                label={t('pages.inbounds.form.upstreamUrl')}
-                name={[...MASQ_PATH, 'url']}
-              >
+              <FormField label={t('pages.inbounds.form.upstreamUrl')} name={[...MASQ_PATH, 'url']}>
                 <Input placeholder="https://www.example.com" />
               </FormField>
               <FormField
                 label={t('pages.inbounds.form.rewriteHost')}
                 name={[...MASQ_PATH, 'rewriteHost']}
+                valueProp="checked"
+              >
+                <Switch />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.xForwarded')}
+                name={[...MASQ_PATH, 'xForwarded']}
                 valueProp="checked"
               >
                 <Switch />
@@ -88,10 +99,7 @@ export default function HysteriaFields() {
             </>
           )}
           {masqType === 'file' && (
-            <FormField
-              label={t('pages.inbounds.form.directory')}
-              name={[...MASQ_PATH, 'dir']}
-            >
+            <FormField label={t('pages.inbounds.form.directory')} name={[...MASQ_PATH, 'dir']}>
               <Input placeholder="/var/www/html" />
             </FormField>
           )}
@@ -103,16 +111,10 @@ export default function HysteriaFields() {
               >
                 <InputNumber min={0} max={599} style={{ width: '100%' }} />
               </FormField>
-              <FormField
-                label={t('pages.inbounds.form.body')}
-                name={[...MASQ_PATH, 'content']}
-              >
+              <FormField label={t('pages.inbounds.form.body')} name={[...MASQ_PATH, 'content']}>
                 <Input.TextArea autoSize={{ minRows: 3 }} />
               </FormField>
-              <FormField
-                label={t('pages.inbounds.form.headers')}
-                name={[...MASQ_PATH, 'headers']}
-              >
+              <FormField label={t('pages.inbounds.form.headers')} name={[...MASQ_PATH, 'headers']}>
                 <HeaderMapEditor mode="v1" />
               </FormField>
             </>

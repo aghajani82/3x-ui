@@ -17,6 +17,11 @@ interface DateTimePickerProps {
   format?: string;
   placeholder?: string;
   disabled?: boolean;
+  allowClear?: boolean;
+  maxDate?: Dayjs;
+  id?: string;
+  'aria-label'?: string;
+  'aria-describedby'?: string;
 }
 
 const LIGHT_THEME = {
@@ -53,6 +58,11 @@ export default function DateTimePicker({
   format = 'YYYY-MM-DD HH:mm:ss',
   placeholder = '',
   disabled = false,
+  allowClear = true,
+  maxDate,
+  id,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
 }: DateTimePickerProps) {
   const { t } = useTranslation();
   const { datepicker } = useDatepicker();
@@ -78,6 +88,14 @@ export default function DateTimePicker({
     return LIGHT_THEME;
   }, [isDark, isUltra]);
 
+  const commitChange = (next: Dayjs | null) => {
+    if (next && maxDate && next.isAfter(maxDate)) {
+      if (datepicker === 'jalalian') setClearNonce((n) => n + 1);
+      return;
+    }
+    onChange(next);
+  };
+
   // The library hardcodes a Persian placeholder and exposes no working prop to
   // override it, so clear it (or apply the caller's) on the input directly so
   // the empty field shows no leftover Persian text. No dep array: re-apply
@@ -85,31 +103,39 @@ export default function DateTimePicker({
   useEffect(() => {
     if (datepicker !== 'jalalian') return;
     const input = jalaliRef.current?.querySelector('input');
-    if (input) input.placeholder = placeholder;
+    if (!input) return;
+    input.placeholder = placeholder;
+    if (id) input.id = id;
+    if (ariaLabel) input.setAttribute('aria-label', ariaLabel);
+    if (ariaDescribedBy) input.setAttribute('aria-describedby', ariaDescribedBy);
   });
 
   if (datepicker === 'jalalian') {
     return (
-      <div ref={jalaliRef} className={`jdp-wrap${isDark ? ' jdp-dark' : ''}${isUltra ? ' jdp-ultra' : ''}${disabled ? ' jdp-disabled' : ''}${value ? '' : ' jdp-empty'}`}>
+      <div
+        ref={jalaliRef}
+        className={`jdp-wrap${isDark ? ' jdp-dark' : ''}${isUltra ? ' jdp-ultra' : ''}${disabled ? ' jdp-disabled' : ''}${value ? '' : ' jdp-empty'}`}
+      >
         <PersianDateTimePicker
           key={clearNonce}
           value={value ? value.valueOf() : null}
           onChange={(next: number | string | null) => {
             if (suppressMountEmit.current) return;
             if (next == null || next === '') {
-              onChange(null);
+              commitChange(null);
               return;
             }
             const ms = typeof next === 'number' ? next : Number(next);
-            if (Number.isFinite(ms)) onChange(dayjs(ms));
+            if (Number.isFinite(ms)) commitChange(dayjs(ms));
           }}
           showTime={showTime}
           outputFormat="timestamp"
+          maxDate={maxDate?.toDate()}
           persianNumbers
           rtlCalendar
           theme={persianTheme}
         />
-        {value && !disabled && (
+        {value && allowClear && !disabled && (
           <button
             type="button"
             className="jdp-clear"
@@ -117,11 +143,11 @@ export default function DateTimePicker({
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
-              onChange(null);
+              commitChange(null);
               setClearNonce((n) => n + 1);
             }}
           >
-            <CloseCircleFilled />
+            <CloseCircleFilled aria-hidden />
           </button>
         )}
       </div>
@@ -131,13 +157,18 @@ export default function DateTimePicker({
   return (
     <DatePicker
       value={value}
-      onChange={(next) => onChange(next || null)}
-      onCalendarChange={(next) => onChange((Array.isArray(next) ? next[0] : next) || null)}
+      onChange={(next) => commitChange(next || null)}
+      onCalendarChange={(next) => commitChange((Array.isArray(next) ? next[0] : next) || null)}
       showTime={showTime ? { format: 'HH:mm:ss' } : false}
       needConfirm={false}
       format={format}
       placeholder={placeholder}
       disabled={disabled}
+      allowClear={allowClear}
+      maxDate={maxDate}
+      id={id}
+      aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       style={{ width: '100%' }}
     />
   );

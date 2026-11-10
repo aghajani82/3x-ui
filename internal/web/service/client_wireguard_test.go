@@ -2,8 +2,10 @@ package service
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	wgutil "github.com/mhsanaei/3x-ui/v3/internal/util/wireguard"
 )
@@ -23,10 +25,13 @@ func TestAllocateWireguardAddress(t *testing.T) {
 		{name: "default base when empty", used: nil, base: "", want: "10.0.0.2/32"},
 		{name: "full ipv4 scope widens instead of failing", used: []string{"10.9.0.2/32", "10.9.0.3/32"}, base: "10.9.0.0/30", want: "10.9.0.4/32"},
 		{name: "exhausted ipv6 scope errors", used: []string{"fd00::2/128", "fd00::3/128"}, base: "fd00::/126", err: true},
+		// A node can report a wide claim; the scan must step over it, not through 2^64 addresses.
+		{name: "wide claim over an ipv6 scope", used: []string{"fd00::/64"}, base: "fd00::/64", err: true},
+		{name: "first address past a wide claim", used: []string{"10.0.0.0/25"}, base: "10.0.0.0/24", want: "10.0.0.128/32"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := allocateWireguardAddress(tt.used, tt.base)
+			got, err := allocateWireguardAddress(tt.used, tt.base, true)
 			if tt.err {
 				if err == nil {
 					t.Fatalf("expected error, got %q", got)
@@ -46,7 +51,7 @@ func TestAllocateWireguardAddress(t *testing.T) {
 func TestDefaultWireguardClientsGeneratesKeypair(t *testing.T) {
 	clients := []model.Client{{Email: "a@wg"}}
 	ifaces := []any{map[string]any{"email": "a@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", nil, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	c := clients[0]
@@ -73,7 +78,7 @@ func TestDefaultWireguardClientsDerivesPublicKey(t *testing.T) {
 	}
 	clients := []model.Client{{Email: "b@wg", PrivateKey: priv}}
 	ifaces := []any{map[string]any{"email": "b@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", nil, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].PublicKey != wantPub {
@@ -89,7 +94,7 @@ func TestDefaultWireguardClientsPreservesProvided(t *testing.T) {
 		AllowedIPs: []string{"10.0.0.50/32"},
 	}}
 	ifaces := []any{map[string]any{"email": "c@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", nil, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].PrivateKey != "keep-priv" || clients[0].PublicKey != "keep-pub" {
@@ -124,7 +129,7 @@ func TestDefaultWireguardClientsHonorsExistingSubnet(t *testing.T) {
 	existing := []model.Client{{Email: "old@wg", AllowedIPs: []string{"172.16.0.2/32"}}}
 	clients := []model.Client{{Email: "new@wg"}}
 	ifaces := []any{map[string]any{"email": "new@wg"}}
-	if err := defaultWireguardClients(existing, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", existing, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if got := clients[0].AllowedIPs[0]; got != "172.16.0.3/32" {
@@ -138,7 +143,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 		used = append(used, fmt.Sprintf("10.0.0.%d/32", i))
 	}
 
-	got, err := allocateWireguardAddress(used, "10.0.0.0/24")
+	got, err := allocateWireguardAddress(used, "10.0.0.0/24", true)
 	if err != nil {
 		t.Fatalf("allocate with a full /24: %v", err)
 	}
@@ -147,7 +152,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 	}
 
 	used = append(used, got)
-	next, err := allocateWireguardAddress(used, "10.0.0.0/24")
+	next, err := allocateWireguardAddress(used, "10.0.0.0/24", true)
 	if err != nil {
 		t.Fatalf("allocate after widening: %v", err)
 	}
@@ -157,7 +162,7 @@ func TestAllocateWireguardAddressWidensPastFullSlash24(t *testing.T) {
 }
 
 func TestAllocateWireguardAddressFillsItsOwnSlash24First(t *testing.T) {
-	got, err := allocateWireguardAddress([]string{"172.16.0.2/32"}, "172.16.0.0/24")
+	got, err := allocateWireguardAddress([]string{"172.16.0.2/32"}, "172.16.0.0/24", true)
 	if err != nil {
 		t.Fatalf("allocateWireguardAddress: %v", err)
 	}
@@ -166,10 +171,23 @@ func TestAllocateWireguardAddressFillsItsOwnSlash24First(t *testing.T) {
 	}
 }
 
+func TestAllocateWireguardAddressNoWideningFailsWhenPoolExhausted(t *testing.T) {
+	used := make([]string, 0, 254)
+	for i := 2; i <= 255; i++ {
+		used = append(used, fmt.Sprintf("10.0.0.%d/32", i))
+	}
+	// allowWidening=false: AmneziaWG's own call. A full /24 must fail loudly
+	// instead of handing out an address from the containing /16 that the
+	// kernel interface's own Address never routes (PR #6105 Finding 12).
+	if _, err := allocateWireguardAddress(used, "10.0.0.0/24", false); err == nil {
+		t.Fatal("a full /24 with widening disabled must fail, not widen")
+	}
+}
+
 func TestDefaultWireguardClientsAllocatesDistinctIPs(t *testing.T) {
 	clients := []model.Client{{Email: "x@wg"}, {Email: "y@wg"}}
 	ifaces := []any{map[string]any{"email": "x@wg"}, map[string]any{"email": "y@wg"}}
-	if err := defaultWireguardClients(nil, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", nil, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if clients[0].AllowedIPs[0] == clients[1].AllowedIPs[0] {
@@ -222,7 +240,7 @@ func TestDefaultWireguardClientsHonorsAndValidatesSuppliedAllowedIPs(t *testing.
 
 	clients := []model.Client{{Email: "c@wg", AllowedIPs: []string{"10.0.0.9"}}}
 	ifaces := []any{map[string]any{"email": "c@wg"}}
-	if err := defaultWireguardClients(existing, clients, ifaces); err != nil {
+	if err := defaultWireguardClients("", existing, clients, ifaces, nil); err != nil {
 		t.Fatalf("defaultWireguardClients: %v", err)
 	}
 	if len(clients[0].AllowedIPs) != 1 || clients[0].AllowedIPs[0] != "10.0.0.9/32" {
@@ -230,13 +248,235 @@ func TestDefaultWireguardClientsHonorsAndValidatesSuppliedAllowedIPs(t *testing.
 	}
 
 	dup := []model.Client{{Email: "d@wg", AllowedIPs: []string{"10.0.0.2/32"}}}
-	err := defaultWireguardClients(existing, dup, []any{map[string]any{"email": "d@wg"}})
+	err := defaultWireguardClients("", existing, dup, []any{map[string]any{"email": "d@wg"}}, nil)
 	if err == nil {
 		t.Fatal("duplicate allowedIPs across clients must be rejected")
 	}
 
 	bad := []model.Client{{Email: "e@wg", AllowedIPs: []string{"not-an-ip"}}}
-	if err := defaultWireguardClients(existing, bad, []any{map[string]any{"email": "e@wg"}}); err == nil {
+	if err := defaultWireguardClients("", existing, bad, []any{map[string]any{"email": "e@wg"}}, nil); err == nil {
 		t.Fatal("invalid allowedIPs entry must be rejected")
+	}
+}
+
+// A duplicate manually-typed address is rejected even when the OTHER holder
+// lives on a completely different inbound (e.g. a WireGuard client and an
+// AmneziaWG peer given the same address by habit) -- this is the exact
+// real-world scenario that motivated crossInboundUsed: two inbounds sharing
+// a subnet must not be able to silently hand out or accept the same address.
+func TestDefaultWireguardClientsRejectsCrossInboundDuplicate(t *testing.T) {
+	crossUsed := map[string]string{"10.8.1.21/32": "inbound 'awg' (#10)"}
+	dup := []model.Client{{Email: "d@wg", AllowedIPs: []string{"10.8.1.21/32"}}}
+	err := defaultWireguardClients("", nil, dup, []any{map[string]any{"email": "d@wg"}}, crossUsed)
+	if err == nil {
+		t.Fatal("allowedIPs already used on another inbound must be rejected")
+	}
+	if !strings.Contains(err.Error(), "inbound 'awg' (#10)") {
+		t.Fatalf("error should name the other inbound holding the address, got: %v", err)
+	}
+}
+
+// Auto-allocation (no AllowedIPs supplied) must also skip addresses already
+// claimed on another inbound, not just ones used on this one.
+func TestDefaultWireguardClientsAutoAllocateSkipsCrossInboundUsed(t *testing.T) {
+	crossUsed := map[string]string{"10.0.0.2/32": "inbound 'other-wg' (#7)"}
+	clients := []model.Client{{Email: "f@wg"}}
+	ifaces := []any{map[string]any{"email": "f@wg"}}
+	if err := defaultWireguardClients("", nil, clients, ifaces, crossUsed); err != nil {
+		t.Fatalf("defaultWireguardClients: %v", err)
+	}
+	if clients[0].AllowedIPs[0] != "10.0.0.3/32" {
+		t.Fatalf("auto-allocation should skip the cross-inbound-used .2 and pick .3, got %v", clients[0].AllowedIPs)
+	}
+}
+
+// crossInboundUsed must never influence which subnet THIS inbound's own new
+// clients get allocated from -- only existing (this inbound's own clients)
+// may do that. Otherwise a brand-new WireGuard inbound on a panel that
+// already has an unrelated AmneziaWG inbound would infer the wrong base
+// subnet purely from the other inbound's addresses.
+func TestDefaultWireguardClientsCrossInboundUsedDoesNotSkewSubnetInference(t *testing.T) {
+	crossUsed := map[string]string{"10.8.1.21/32": "inbound 'awg' (#10)"}
+	clients := []model.Client{{Email: "g@wg"}}
+	ifaces := []any{map[string]any{"email": "g@wg"}}
+	if err := defaultWireguardClients("", nil, clients, ifaces, crossUsed); err != nil {
+		t.Fatalf("defaultWireguardClients: %v", err)
+	}
+	if got := clients[0].AllowedIPs[0]; got != "10.0.0.2/32" {
+		t.Fatalf("base subnet must stay the default 10.0.0.0/24, not be skewed by a cross-inbound address; got %v", got)
+	}
+}
+
+func TestExplicitWireguardSubnetBase(t *testing.T) {
+	tests := []struct {
+		name         string
+		settingsJSON string
+		want         string
+	}{
+		{name: "unset settings", settingsJSON: `{"secretKey":"x"}`, want: ""},
+		{name: "empty subnetIp", settingsJSON: `{"subnetIp":"","subnetCidr":24}`, want: ""},
+		{name: "zero cidr", settingsJSON: `{"subnetIp":"10.8.1.0","subnetCidr":0}`, want: ""},
+		{name: "invalid ip", settingsJSON: `{"subnetIp":"not-an-ip","subnetCidr":24}`, want: ""},
+		{name: "invalid json", settingsJSON: `not json`, want: ""},
+		{name: "configured subnet", settingsJSON: `{"subnetIp":"10.8.1.0","subnetCidr":24}`, want: "10.8.1.0/24"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := explicitWireguardSubnetBase(tt.settingsJSON); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDefaultWireguardClientsPrefersExplicitSubnetOverInference is the
+// backend half of a user-requested feature: WireGuard previously had no
+// admin-configurable subnet at all, only an implicit one (inferred from
+// existing clients' own addresses, or a hardcoded 10.0.0.0/24 fallback when
+// none exist yet) -- unlike AmneziaWG, which has always had a real
+// server.subnetIp/subnetCidr field. An explicit subnetIp/subnetCidr in the
+// inbound's own settings must now win outright, even when existing clients
+// would otherwise suggest a different base via wireguardAllocationBase.
+func TestDefaultWireguardClientsPrefersExplicitSubnetOverInference(t *testing.T) {
+	existing := []model.Client{{Email: "old@wg", AllowedIPs: []string{"172.16.0.2/32"}}}
+	clients := []model.Client{{Email: "new@wg"}}
+	ifaces := []any{map[string]any{"email": "new@wg"}}
+	settingsJSON := `{"subnetIp":"10.8.1.0","subnetCidr":24}`
+	if err := defaultWireguardClients(settingsJSON, existing, clients, ifaces, nil); err != nil {
+		t.Fatalf("defaultWireguardClients: %v", err)
+	}
+	if got := clients[0].AllowedIPs[0]; got != "10.8.1.2/32" {
+		t.Fatalf("explicit subnet must win over inference from existing clients (172.16.0.0/24); got %v", got)
+	}
+}
+
+// TestDefaultWireguardClientsFallsBackWhenNoExplicitSubnet locks in the
+// backward-compat half of the same feature: an inbound saved before this
+// field existed (settingsJSON carries no subnetIp/subnetCidr at all) must
+// keep allocating exactly as it always has.
+func TestDefaultWireguardClientsFallsBackWhenNoExplicitSubnet(t *testing.T) {
+	existing := []model.Client{{Email: "old@wg", AllowedIPs: []string{"172.16.0.2/32"}}}
+	clients := []model.Client{{Email: "new@wg"}}
+	ifaces := []any{map[string]any{"email": "new@wg"}}
+	settingsJSON := `{"secretKey":"x","peers":[],"clients":[]}`
+	if err := defaultWireguardClients(settingsJSON, existing, clients, ifaces, nil); err != nil {
+		t.Fatalf("defaultWireguardClients: %v", err)
+	}
+	if got := clients[0].AllowedIPs[0]; got != "172.16.0.3/32" {
+		t.Fatalf("with no explicit subnet, inference from existing clients must still apply; got %v", got)
+	}
+}
+
+// xray credits a packet to the first peer whose allowedIPs contain its source,
+// so a prefix covering another client's address steals that client's traffic.
+func TestDefaultWireguardClientsRejectsOverlappingAllowedIPs(t *testing.T) {
+	existing := []model.Client{{Email: "a@wg", AllowedIPs: []string{"10.10.2.9/24"}}}
+	clients := []model.Client{{Email: "b@wg", AllowedIPs: []string{"10.10.2.52/24"}}}
+	err := defaultWireguardClients("", existing, clients, []any{map[string]any{"email": "b@wg"}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "10.10.2.52/24") || !strings.Contains(err.Error(), "10.10.2.9/24") {
+		t.Fatalf("overlapping allowedIPs must be rejected naming both entries, got: %v", err)
+	}
+
+	crossUsed := map[string]string{"10.8.1.0/24": "inbound 'awg' (#10)"}
+	inside := []model.Client{{Email: "c@wg", AllowedIPs: []string{"10.8.1.21/32"}}}
+	err = defaultWireguardClients("", nil, inside, []any{map[string]any{"email": "c@wg"}}, crossUsed)
+	if err == nil || !strings.Contains(err.Error(), "inbound 'awg' (#10)") {
+		t.Fatalf("an address inside another inbound's prefix must be rejected naming that inbound, got: %v", err)
+	}
+}
+
+func TestAllocateWireguardAddressSkipsAddressesInsideUsedPrefixes(t *testing.T) {
+	got, err := allocateWireguardAddress([]string{"10.0.0.2/31"}, "10.0.0.0/24", true)
+	if err != nil {
+		t.Fatalf("allocateWireguardAddress: %v", err)
+	}
+	if got != "10.0.0.4/32" {
+		t.Fatalf("got %s, want 10.0.0.4/32: .2 and .3 are both inside the used 10.0.0.2/31", got)
+	}
+}
+
+// A /0 that is being written contains every other peer's address, and its host bits
+// are read back as the peer's own tunnel address (amneziawg.FirstIPv4). Only a stored
+// 0.0.0.0/0 or ::/0 keeps nobody out, as legacy peers carry it.
+func TestWireguardSlashZeroIsSubjectToTheOverlapGuard(t *testing.T) {
+	for _, tt := range []struct {
+		entry, used string
+		taken       bool
+	}{
+		{"10.8.1.2/0", "10.8.1.2/32", true},
+		{"10.8.1.3/0", "10.8.1.2/32", true},
+		{"0.0.0.0/0", "10.8.1.2/32", true},
+		{"::/0", "fd00::2/128", true},
+		{"fd00::2/0", "fd00::2/128", true},
+		{"::/0", "10.8.1.2/32", false},
+		{"10.8.1.2/32", "10.8.1.2/0", true},
+		{"fd00::2/128", "fd00::2/0", true},
+		{"10.8.1.2/32", "10.8.1.3/0", false},
+		{"10.8.1.2/32", "0.0.0.0/0", false},
+		{"0.0.0.0/0", "0.0.0.0/0", false},
+	} {
+		t.Run(tt.entry+" next to "+tt.used, func(t *testing.T) {
+			if _, taken := wireguardAllowedIPsOverlap([]string{tt.entry}, []string{tt.used}); (taken != "") != tt.taken {
+				t.Errorf("taken = %q, want a collision: %v", taken, tt.taken)
+			}
+		})
+	}
+
+	existing := []model.Client{{Email: "victim@wg", AllowedIPs: []string{"10.0.0.2/32"}}}
+	awgSettings := `{"server":{"subnetIp":"10.0.0.0","subnetCidr":24}}`
+	for _, entry := range []string{"10.0.0.2/0", "0.0.0.0/0"} {
+		clients := []model.Client{{Email: "other@wg", AllowedIPs: []string{entry}}}
+		err := defaultWireguardClients("", existing, clients, []any{map[string]any{}}, nil)
+		if err == nil || !strings.Contains(err.Error(), entry+" overlaps 10.0.0.2/32") {
+			t.Errorf("wireguard: %s next to 10.0.0.2/32: err = %v, want an overlap", entry, err)
+		}
+		err = defaultAmneziaWGClients(awgSettings, existing, clients, []any{map[string]any{}}, nil)
+		if err == nil || !strings.Contains(err.Error(), entry+" overlaps 10.0.0.2/32") {
+			t.Errorf("amneziawg: %s next to 10.0.0.2/32: err = %v, want an overlap", entry, err)
+		}
+	}
+
+	got, err := allocateWireguardAddress([]string{"10.0.0.2/0"}, "10.0.0.0/24", true)
+	if err != nil || got != "10.0.0.3/32" {
+		t.Errorf("allocated %q (%v) next to a stored 10.0.0.2/0, want 10.0.0.3/32", got, err)
+	}
+}
+
+// The edit form echoes what the client holds, so a legacy peer's default route has
+// to survive a save next to other clients; no edit may bring in a new one.
+func TestUpdateInboundClientKeepsButNeverAddsDefaultRoute(t *testing.T) {
+	setupConflictDB(t)
+	seedInboundConflict(t, "own-wg", "0.0.0.0", 51830, model.WireGuard, ``, `{"clients":[`+
+		`{"email":"legacy","subId":"s-legacy","enable":true,"publicKey":"QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=","allowedIPs":["0.0.0.0/0","::/0"]},`+
+		`{"email":"victim","subId":"s-victim","enable":true,"publicKey":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=","allowedIPs":["10.0.0.2/32"]},`+
+		`{"email":"other","subId":"s-other","enable":true,"publicKey":"Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M=","allowedIPs":["10.0.0.3/32"]}]}`)
+	s, inboundSvc := &ClientService{}, &InboundService{}
+	var own model.Inbound
+	if err := database.GetDB().Where("tag = ?", "own-wg").First(&own).Error; err != nil {
+		t.Fatalf("read seeded row: %v", err)
+	}
+	clients, err := inboundSvc.GetClients(&own)
+	if err != nil {
+		t.Fatalf("GetClients: %v", err)
+	}
+	if err := s.SyncInbound(nil, own.Id, clients); err != nil {
+		t.Fatalf("SyncInbound: %v", err)
+	}
+	save := func(email, allowedIPs string) error {
+		data := &model.Inbound{Id: own.Id, Settings: `{"clients":[{"email":"` + email + `","subId":"s-` + email + `","enable":true,"allowedIPs":` + allowedIPs + `}]}`}
+		_, err := s.UpdateInboundClient(inboundSvc, data, email)
+		return err
+	}
+
+	if err := save("legacy", `["0.0.0.0/0","::/0"]`); err != nil {
+		t.Errorf("saving the legacy peer as it is: %v", err)
+	}
+	for _, allowedIPs := range []string{`["0.0.0.0/0"]`, `["10.0.0.2/0"]`, `["10.0.0.3/32","0.0.0.0/0"]`} {
+		if err := save("other", allowedIPs); err == nil || !strings.Contains(err.Error(), "overlaps 10.0.0.2/32") {
+			t.Errorf("other saved with %s: err = %v, want an overlap with 10.0.0.2/32", allowedIPs, err)
+		}
+	}
+	if err := save("legacy", `["10.0.0.2/0","::/0"]`); err == nil || !strings.Contains(err.Error(), "10.0.0.2/0 overlaps 10.0.0.2/32") {
+		t.Errorf("the legacy peer took 10.0.0.2/0 next to 10.0.0.2/32: err = %v", err)
 	}
 }

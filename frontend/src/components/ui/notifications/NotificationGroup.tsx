@@ -1,4 +1,4 @@
-import { Space } from 'antd';
+import { Space, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { AllSetting } from '@/models/setting';
 import type { NotificationGroupConfig } from './types';
@@ -15,7 +15,14 @@ interface Props {
   updateSetting: (patch: Partial<AllSetting>) => void;
 }
 
-export function NotificationGroup({ config, selected, onToggle, onToggleAll, allSetting, updateSetting }: Props) {
+export function NotificationGroup({
+  config,
+  selected,
+  onToggle,
+  onToggleAll,
+  allSetting,
+  updateSetting,
+}: Props) {
   const { t } = useTranslation();
 
   const count = config.events.filter((e) => selected.includes(e.key)).length;
@@ -48,11 +55,22 @@ export function NotificationGroup({ config, selected, onToggle, onToggleAll, all
             checked={selected.includes(event.key)}
             onToggle={() => onToggle(event.key)}
           >
-            {event.extra?.({
-              value: Number((allSetting as unknown as Record<string, unknown>)[event.settingKey]) || 0,
-              onChange: (v) => updateSetting({ [event.settingKey]: v }),
-              ariaLabel: t(`pages.settings.${event.label}`),
-            })}
+            {event.extra && (
+              <Space size={8}>
+                {event.extra({
+                  value:
+                    Number((allSetting as unknown as Record<string, unknown>)[event.settingKey]) ||
+                    0,
+                  onChange: (v) => updateSetting({ [event.settingKey]: v }),
+                  ariaLabel: t(`pages.settings.${event.label}`),
+                })}
+                {event.hint && (
+                  <Typography.Text type="secondary">
+                    {t(`pages.settings.${event.hint}`)}
+                  </Typography.Text>
+                )}
+              </Space>
+            )}
           </NotificationEvent>
         ))}
       </Space>

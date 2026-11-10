@@ -34,12 +34,34 @@ export function useDnsServerColumns({
               trigger={['click']}
               menu={{
                 items: [
-                  { key: 'edit', label: <><EditOutlined /> {t('edit')}</>, onClick: () => openEditServer(index) },
-                  { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, onClick: () => deleteServer(index) },
+                  {
+                    key: 'edit',
+                    label: (
+                      <>
+                        <EditOutlined aria-hidden /> {t('edit')}
+                      </>
+                    ),
+                    onClick: () => openEditServer(index),
+                  },
+                  {
+                    key: 'del',
+                    danger: true,
+                    label: (
+                      <>
+                        <DeleteOutlined aria-hidden /> {t('delete')}
+                      </>
+                    ),
+                    onClick: () => deleteServer(index),
+                  },
                 ],
               }}
             >
-              <Button aria-label={t('more')} shape="circle" size="small" icon={<MoreOutlined />} />
+              <Button
+                aria-label={t('more')}
+                shape="circle"
+                size="small"
+                icon={<MoreOutlined aria-hidden />}
+              />
             </Dropdown>
           </Space>
         ),
@@ -85,7 +107,14 @@ export function useFakednsColumns({
         render: (_v, _record, index) => (
           <Space size={6}>
             <span className="row-index">{index + 1}</span>
-            <Button aria-label={t('delete')} shape="circle" size="small" danger icon={<DeleteOutlined />} onClick={() => deleteFakedns(index)} />
+            <Button
+              aria-label={t('delete')}
+              shape="circle"
+              size="small"
+              danger
+              icon={<DeleteOutlined aria-hidden />}
+              onClick={() => deleteFakedns(index)}
+            />
           </Space>
         ),
       },

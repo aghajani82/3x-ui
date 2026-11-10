@@ -2,6 +2,7 @@ package service
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
@@ -63,7 +64,7 @@ func TestSetRemoteTraffic_AttributesOriginNodeGuid(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -124,7 +125,7 @@ func TestSetRemoteTraffic_RemapsClonedNodeOwnGuidOrigin(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(1, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(1, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -191,7 +192,7 @@ func TestSetRemoteTraffic_RemapsActiveInboundTreeAndCentralTags(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(1, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(1, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -254,7 +255,7 @@ func TestSetRemoteTraffic_NormalizesForwardedActiveInboundSubtreeTags(t *testing
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(1, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(1, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -301,7 +302,7 @@ func TestSetRemoteTraffic_DropsForeignActiveInboundGuid(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(1, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(1, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -336,7 +337,7 @@ func TestSetRemoteTraffic_EmptySnapshotKeepsCentralInbounds(t *testing.T) {
 
 	// Empty snapshot — the node reported no inbounds this cycle.
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(nodeID, &runtime.TrafficSnapshot{}, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(nodeID, &runtime.TrafficSnapshot{}, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -391,7 +392,7 @@ func TestSetRemoteTraffic_PreservesLocalShareAddressStrategy(t *testing.T) {
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -436,7 +437,7 @@ func TestSetRemoteTraffic_DefaultsShareAddressFieldsForNewCentralInbound(t *test
 	}
 
 	svc := InboundService{}
-	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false); err != nil {
+	if _, err := svc.setRemoteTrafficLocked(nodeID, snap, false, false); err != nil {
 		t.Fatalf("setRemoteTrafficLocked: %v", err)
 	}
 
@@ -446,5 +447,26 @@ func TestSetRemoteTraffic_DefaultsShareAddressFieldsForNewCentralInbound(t *test
 	}
 	if ib.ShareAddrStrategy != "node" || ib.ShareAddr != "" {
 		t.Fatalf("new central inbound share fields = (%q, %q), want (node, empty)", ib.ShareAddrStrategy, ib.ShareAddr)
+	}
+}
+
+// An origin GUID is copied into the inbound row and its index; one a node forwards over
+// the GUID bound is attributed to the reporting node instead of being stored.
+func TestSetRemoteTraffic_RefusesAnOversizedForwardedOrigin(t *testing.T) {
+	setupConflictDB(t)
+	db := database.GetDB()
+	if err := db.Create(&model.Node{Id: 1, Name: "node2", Address: "10.0.0.2", Port: 2053, ApiToken: "t", Guid: "node2-guid"}).Error; err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	snap := &runtime.TrafficSnapshot{Inbounds: []*model.Inbound{{
+		Tag: "in-443-tcp", Enable: true, Port: 443, Protocol: model.VLESS, Settings: `{"clients":[]}`,
+		OriginNodeGuid: strings.Repeat("g", maxPanelGuidLen+1),
+	}}}
+	if _, err := (&InboundService{}).setRemoteTrafficLocked(1, snap, false, false); err != nil {
+		t.Fatalf("setRemoteTrafficLocked: %v", err)
+	}
+	var ib model.Inbound
+	if err := db.Where("tag = ?", "in-443-tcp").First(&ib).Error; err != nil || ib.OriginNodeGuid != "node2-guid" {
+		t.Fatalf("origin = %d bytes (%v), want the reporting node's GUID", len(ib.OriginNodeGuid), err)
 	}
 }

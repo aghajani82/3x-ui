@@ -2,11 +2,11 @@ import { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
 import { Button, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
-import { FormProvider } from 'react-hook-form';
+import { FormProvider, useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { FormField } from './FormField';
-import { useZodForm } from './useZodForm';
 
 const GB = 1024 * 1024 * 1024;
 
@@ -25,14 +25,24 @@ const meta = {
   },
   argTypes: {
     name: { description: 'Field path — a dotted string or an array of segments joined with dots.' },
-    control: { description: 'Optional react-hook-form control; falls back to the surrounding FormProvider.' },
+    control: {
+      description: 'Optional react-hook-form control; falls back to the surrounding FormProvider.',
+    },
     label: { description: 'Form.Item label.' },
     tooltip: { description: 'Form.Item tooltip shown next to the label.' },
     extra: { description: 'Helper text rendered below the input.' },
-    valueProp: { description: 'Prop the child receives the value on: `value` (default) or `checked` for switches.' },
-    transform: { description: 'Optional input/output mappers, e.g. bytes stored in the form but GB shown in the input.' },
+    valueProp: {
+      description:
+        'Prop the child receives the value on: `value` (default) or `checked` for switches.',
+    },
+    transform: {
+      description:
+        'Optional input/output mappers, e.g. bytes stored in the form but GB shown in the input.',
+    },
     onAfterChange: { description: 'Called with the stored value after every change.' },
-    rules: { description: 'Controller-level validation rules applied on top of the form resolver.' },
+    rules: {
+      description: 'Controller-level validation rules applied on top of the form resolver.',
+    },
     required: { description: 'Marks the label with the required asterisk.' },
     noStyle: { description: 'Render the bare input without Form.Item chrome.' },
     children: { description: 'The single Ant Design control to wire up.' },
@@ -50,13 +60,19 @@ const ClientSchema = z.object({
 });
 
 function ClientDemo() {
-  const methods = useZodForm(ClientSchema, {
+  const methods = useForm<z.infer<typeof ClientSchema>>({
+    resolver: zodResolver(ClientSchema),
     defaultValues: { email: 'user1@example.com', flow: 'xtls-rprx-vision', enable: true },
   });
   return (
     <FormProvider {...methods}>
       <Form layout="vertical" style={{ maxWidth: 360 }}>
-        <FormField name="email" label="Email" tooltip="Unique identifier used to match client traffic" required>
+        <FormField
+          name="email"
+          label="Email"
+          tooltip="Unique identifier used to match client traffic"
+          required
+        >
           <Input placeholder="user1@example.com" />
         </FormField>
         <FormField name="flow" label="Flow" extra="Only applies to VLESS over raw TLS">
@@ -80,8 +96,11 @@ const TrafficSchema = z.object({
 });
 
 function TrafficDemo() {
-  const methods = useZodForm(TrafficSchema, { defaultValues: { totalBytes: 50 * GB } });
-  const totalBytes = methods.watch('totalBytes');
+  const methods = useForm<z.infer<typeof TrafficSchema>>({
+    resolver: zodResolver(TrafficSchema),
+    defaultValues: { totalBytes: 50 * GB },
+  });
+  const totalBytes = useWatch({ control: methods.control, name: 'totalBytes' });
   return (
     <FormProvider {...methods}>
       <Form layout="vertical" style={{ maxWidth: 360 }}>
@@ -96,7 +115,9 @@ function TrafficDemo() {
         >
           <InputNumber min={0} style={{ width: '100%' }} />
         </FormField>
-        <Typography.Text type="secondary">Form state: {totalBytes.toLocaleString()} bytes</Typography.Text>
+        <Typography.Text type="secondary">
+          Form state: {totalBytes.toLocaleString()} bytes
+        </Typography.Text>
       </Form>
     </FormProvider>
   );
@@ -111,7 +132,10 @@ const InboundSchema = z.object({
 });
 
 function ValidationDemo() {
-  const methods = useZodForm(InboundSchema, { defaultValues: { remark: '', port: 0 } });
+  const methods = useForm<z.infer<typeof InboundSchema>>({
+    resolver: zodResolver(InboundSchema),
+    defaultValues: { remark: '', port: 0 },
+  });
   useEffect(() => {
     void methods.trigger();
   }, [methods]);
@@ -140,7 +164,8 @@ const RealitySchema = z.object({
 });
 
 function NestedDemo() {
-  const methods = useZodForm(RealitySchema, {
+  const methods = useForm<z.infer<typeof RealitySchema>>({
+    resolver: zodResolver(RealitySchema),
     defaultValues: {
       streamSettings: {
         realitySettings: { dest: 'yahoo.com:443', serverNames: 'yahoo.com,www.yahoo.com' },
@@ -196,6 +221,9 @@ export const ValidationErrors: Story = {
   play: async ({ canvas, userEvent }) => {
     const remarkError = await canvas.findByText('Remark is required');
     await waitFor(() => expect(remarkError).toBeVisible());
+    await expect(canvas.getByRole('textbox', { name: 'Remark' })).toHaveAccessibleDescription(
+      'Remark is required',
+    );
     await waitFor(() => expect(canvas.getByText('Port must be between 1 and 65535')).toBeVisible());
     await userEvent.type(canvas.getByPlaceholderText('vless-reality-443'), 'vless-reality-443');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));

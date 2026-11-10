@@ -13,7 +13,14 @@ import {
 } from '@ant-design/icons';
 
 import { useInboundOptions } from '@/api/queries/useInboundOptions';
-import { buildRemarkByTag, chipPreview, inboundTagChipPreview, inboundTagsDisplayTitle, isApiRule, ruleCriteriaChips } from './helpers';
+import {
+  buildRemarkByTag,
+  chipPreview,
+  inboundTagChipPreview,
+  inboundTagsDisplayTitle,
+  isApiRule,
+  ruleCriteriaChips,
+} from './helpers';
 import type { RuleRow } from './types';
 
 interface RuleCardListProps {
@@ -51,7 +58,9 @@ export default function RuleCardList({
           <div
             key={rule.key}
             className={`rule-card ${draggedIndex === index ? 'row-dragging' : ''} ${
-              dropTargetIndex === index && draggedIndex != null && index < draggedIndex ? 'drop-before' : ''
+              dropTargetIndex === index && draggedIndex != null && index < draggedIndex
+                ? 'drop-before'
+                : ''
             } ${dropTargetIndex === index && draggedIndex != null && index > draggedIndex ? 'drop-after' : ''} ${
               rule.enabled === false ? 'rule-disabled' : ''
             }`}
@@ -68,17 +77,58 @@ export default function RuleCardList({
                 trigger={['click']}
                 menu={{
                   items: [
-                    { key: 'edit', label: <><EditOutlined /> {t('edit')}</>, onClick: () => openEdit(index) },
-                    { key: 'up', label: <><ArrowUpOutlined /> {t('pages.inbounds.form.moveUp')}</>, disabled: index === 0, onClick: () => moveUp(index) },
-                    { key: 'down', label: <><ArrowDownOutlined /> {t('pages.inbounds.form.moveDown')}</>, disabled: index === rows.length - 1, onClick: () => moveDown(index) },
-                    { key: 'del', danger: true, label: <><DeleteOutlined /> {t('delete')}</>, onClick: () => confirmDelete(index) },
+                    {
+                      key: 'edit',
+                      label: (
+                        <>
+                          <EditOutlined aria-hidden /> {t('edit')}
+                        </>
+                      ),
+                      onClick: () => openEdit(index),
+                    },
+                    {
+                      key: 'up',
+                      label: (
+                        <>
+                          <ArrowUpOutlined aria-hidden /> {t('pages.inbounds.form.moveUp')}
+                        </>
+                      ),
+                      disabled: index === 0,
+                      onClick: () => moveUp(index),
+                    },
+                    {
+                      key: 'down',
+                      label: (
+                        <>
+                          <ArrowDownOutlined aria-hidden /> {t('pages.inbounds.form.moveDown')}
+                        </>
+                      ),
+                      disabled: index === rows.length - 1,
+                      onClick: () => moveDown(index),
+                    },
+                    {
+                      key: 'del',
+                      danger: true,
+                      label: (
+                        <>
+                          <DeleteOutlined aria-hidden /> {t('delete')}
+                        </>
+                      ),
+                      onClick: () => confirmDelete(index),
+                    },
                   ],
                 }}
               >
-                <Button shape="circle" size="small" icon={<MoreOutlined />} aria-label={t('more')} />
+                <Button
+                  shape="circle"
+                  size="small"
+                  icon={<MoreOutlined aria-hidden />}
+                  aria-label={t('more')}
+                />
               </Dropdown>
               <Switch
                 size="small"
+                aria-label={t('enable')}
                 checked={rule.enabled !== false}
                 onChange={(checked) => toggleRule(index, checked)}
                 disabled={isApiRule(rule)}
@@ -102,7 +152,7 @@ export default function RuleCardList({
               <span className="flow-arrow">→</span>
               <div className="flow-side flow-side-target">
                 <span className="flow-label">
-                  {rule.balancerTag ? t('pages.xray.balancer') || 'Balancer' : t('pages.xray.Outbounds')}
+                  {rule.balancerTag ? t('pages.xray.rules.balancer') : t('pages.xray.Outbounds')}
                 </span>
                 {rule.outboundTag ? (
                   <Tag color="green" className="flow-tag">
@@ -129,6 +179,13 @@ export default function RuleCardList({
                   </Tooltip>
                 ))}
               </div>
+            )}
+            {rule.comment && (
+              <Tooltip title={rule.comment}>
+                <div className="rule-comment">
+                  <span className="rule-comment-text">{rule.comment}</span>
+                </div>
+              </Tooltip>
             )}
           </div>
         ))

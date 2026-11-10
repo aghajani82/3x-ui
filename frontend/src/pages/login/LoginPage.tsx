@@ -26,6 +26,7 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { HttpUtil, LanguageManager } from '@/utils';
 import { FormField, rhfZodValidate } from '@/components/form/rhf';
 import { setMessageInstance } from '@/utils/messageBus';
+import SponsorSlot from '@/components/sponsor/SponsorSlot';
 import { pauseAnimationsUntilLeave, useTheme } from '@/hooks/useTheme';
 import { LoginFormSchema, TwoFactorCodeSchema, type LoginFormValues } from '@/schemas/login';
 import './LoginPage.css';
@@ -49,13 +50,12 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [twoFactorEnable, setTwoFactorEnable] = useState(false);
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const methods = useForm<LoginForm>({ defaultValues: { username: '', password: '', twoFactorCode: '' } });
+  const methods = useForm<LoginForm>({
+    defaultValues: { username: '', password: '', twoFactorCode: '' },
+  });
   const [lang, setLang] = useState<string>(() => LanguageManager.getLanguage());
 
-  const headlineWords = useMemo(
-    () => [t('pages.login.hello'), t('pages.login.title')],
-    [t],
-  );
+  const headlineWords = useMemo(() => [t('pages.login.hello'), t('pages.login.title')], [t]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -72,7 +72,9 @@ export default function LoginPage() {
       if (msg.success) setTwoFactorEnable(!!msg.obj);
       setFetched(true);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onSubmit = useCallback(async (values: LoginForm) => {
@@ -111,19 +113,28 @@ export default function LoginPage() {
   }, [isDark, isUltra]);
 
   const langMenuItems = useMemo(
-    () => (LanguageManager.supportedLanguages as { value: string; name: string; icon: string }[]).map((l) => ({
-      key: l.value,
-      label: (
-        <Space size={8}>
-          <span aria-hidden="true">{l.icon}</span>
-          <span>{l.name}</span>
-        </Space>
+    () =>
+      (LanguageManager.supportedLanguages as { value: string; name: string; icon: string }[]).map(
+        (l) => ({
+          key: l.value,
+          label: (
+            <Space size={8}>
+              <span aria-hidden="true">{l.icon}</span>
+              <span>{l.name}</span>
+            </Space>
+          ),
+        }),
       ),
-    })),
     [],
   );
 
-  const themeIcon = !isDark ? <SunOutlined /> : !isUltra ? <MoonOutlined /> : <MoonFilled />;
+  const themeIcon = !isDark ? (
+    <SunOutlined aria-hidden />
+  ) : !isUltra ? (
+    <MoonOutlined aria-hidden />
+  ) : (
+    <MoonFilled aria-hidden />
+  );
 
   return (
     <ConfigProvider theme={antdThemeConfig}>
@@ -162,7 +173,7 @@ export default function LoginPage() {
                 size="large"
                 className="toolbar-btn"
                 aria-label={t('pages.settings.language')}
-                icon={<TranslationOutlined />}
+                icon={<TranslationOutlined aria-hidden />}
               />
             </Popover>
           </div>
@@ -194,7 +205,7 @@ export default function LoginPage() {
                       rules={{ validate: rhfZodValidate(LoginFormSchema.shape.username) }}
                     >
                       <Input
-                        prefix={<UserOutlined />}
+                        prefix={<UserOutlined aria-hidden />}
                         autoComplete="username"
                         size="large"
                         placeholder={t('username')}
@@ -208,7 +219,7 @@ export default function LoginPage() {
                       rules={{ validate: rhfZodValidate(LoginFormSchema.shape.password) }}
                     >
                       <Input.Password
-                        prefix={<LockOutlined />}
+                        prefix={<LockOutlined aria-hidden />}
                         autoComplete="current-password"
                         size="large"
                         placeholder={t('password')}
@@ -222,7 +233,7 @@ export default function LoginPage() {
                         rules={{ validate: rhfZodValidate(TwoFactorCodeSchema) }}
                       >
                         <Input
-                          prefix={<KeyOutlined />}
+                          prefix={<KeyOutlined aria-hidden />}
                           autoComplete="one-time-code"
                           size="large"
                           placeholder={t('twoFactorCode')}
@@ -243,6 +254,7 @@ export default function LoginPage() {
                     </Form.Item>
                   </Form>
                 </FormProvider>
+                <SponsorSlot slot="login" variant="compact" className="login-sponsor" />
               </div>
             )}
           </div>

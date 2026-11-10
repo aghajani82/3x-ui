@@ -1,8 +1,10 @@
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AutoComplete, Button, Form, Input, InputNumber, Select, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 
+import { selectTagRender } from '@/components/form';
 import { FormField } from '@/components/form/rhf';
 import { activateOnKey } from '@/utils/a11y';
 import { OutboundDomainStrategies } from '@/schemas/primitives';
@@ -16,6 +18,7 @@ interface FragmentValue {
 
 export default function FreedomFields() {
   const { t } = useTranslation();
+  const uid = useId();
   const { control, setValue } = useFormContext();
 
   const fragment = (useWatch({ control, name: 'settings.fragment' }) ?? {}) as FragmentValue;
@@ -32,11 +35,16 @@ export default function FreedomFields() {
     append: appendFinalRule,
     remove: removeFinalRule,
   } = useFieldArray({ control, name: 'settings.finalRules' });
-  const finalRulesValues = (useWatch({ control, name: 'settings.finalRules' }) ?? []) as { action?: string }[];
+  const finalRulesValues = (useWatch({ control, name: 'settings.finalRules' }) ?? []) as {
+    action?: string;
+  }[];
 
   return (
     <>
-      <FormField label={t('pages.xray.balancer.balancerStrategy')} name={['settings', 'domainStrategy']}>
+      <FormField
+        label={t('pages.xray.balancer.balancerStrategy')}
+        name={['settings', 'domainStrategy']}
+      >
         <Select
           options={[
             { value: '', label: `(${t('none')})` },
@@ -50,7 +58,10 @@ export default function FreedomFields() {
       <FormField label={t('pages.xray.tun.userLevel')} name={['settings', 'userLevel']}>
         <InputNumber min={0} style={{ width: '100%' }} />
       </FormField>
-      <FormField label={t('pages.xray.outboundForm.proxyProtocol')} name={['settings', 'proxyProtocol']}>
+      <FormField
+        label={t('pages.xray.outboundForm.proxyProtocol')}
+        name={['settings', 'proxyProtocol']}
+      >
         <Select
           options={[
             { value: 0, label: `(${t('none')})` },
@@ -60,19 +71,20 @@ export default function FreedomFields() {
         />
       </FormField>
 
-      <Form.Item label="Fragment">
+      <Form.Item label="Fragment" htmlFor={`${uid}-fragment`}>
         <Switch
+          id={`${uid}-fragment`}
           checked={fragmentEnabled}
           onChange={(checked) => {
             setValue(
               'settings.fragment',
               checked
                 ? {
-                  packets: 'tlshello',
-                  length: '100-200',
-                  interval: '10-20',
-                  maxSplit: '300-400',
-                }
+                    packets: 'tlshello',
+                    length: '100-200',
+                    interval: '10-20',
+                    maxSplit: '300-400',
+                  }
                 : { packets: '', length: '', interval: '', maxSplit: '' },
             );
           }}
@@ -101,20 +113,30 @@ export default function FreedomFields() {
               placeholder="tlshello or n-m, e.g. 1-3"
             />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.length')} name={['settings', 'fragment', 'length']}>
+          <FormField
+            label={t('pages.settings.subFormats.length')}
+            name={['settings', 'fragment', 'length']}
+          >
             <Input />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.interval')} name={['settings', 'fragment', 'interval']}>
+          <FormField
+            label={t('pages.settings.subFormats.interval')}
+            name={['settings', 'fragment', 'interval']}
+          >
             <Input />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.maxSplit')} name={['settings', 'fragment', 'maxSplit']}>
+          <FormField
+            label={t('pages.settings.subFormats.maxSplit')}
+            name={['settings', 'fragment', 'maxSplit']}
+          >
             <Input />
           </FormField>
         </>
       )}
 
-      <Form.Item label={t('pages.settings.subFormats.noises')}>
+      <Form.Item label={t('pages.settings.subFormats.noises')} htmlFor={`${uid}-noises`}>
         <Switch
+          id={`${uid}-noises`}
           checked={noiseFields.length > 0}
           onChange={(checked) => {
             if (checked) {
@@ -129,9 +151,11 @@ export default function FreedomFields() {
             size="small"
             type="primary"
             className="ml-8"
-            icon={<PlusOutlined />}
+            icon={<PlusOutlined aria-hidden />}
             aria-label={t('add')}
-            onClick={() => appendNoise({ type: 'rand', packet: '10-20', delay: '10-16', applyTo: 'ip' })}
+            onClick={() =>
+              appendNoise({ type: 'rand', packet: '10-20', delay: '10-16', applyTo: 'ip' })
+            }
           />
         )}
       </Form.Item>
@@ -152,7 +176,10 @@ export default function FreedomFields() {
               )}
             </div>
           </Form.Item>
-          <FormField label={t('pages.settings.subFormats.type')} name={['settings', 'noises', index, 'type']}>
+          <FormField
+            label={t('pages.settings.subFormats.type')}
+            name={['settings', 'noises', index, 'type']}
+          >
             <Select
               options={['rand', 'base64', 'str', 'hex'].map((v) => ({
                 value: v,
@@ -160,13 +187,22 @@ export default function FreedomFields() {
               }))}
             />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.packet')} name={['settings', 'noises', index, 'packet']}>
+          <FormField
+            label={t('pages.settings.subFormats.packet')}
+            name={['settings', 'noises', index, 'packet']}
+          >
             <Input />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.delayMs')} name={['settings', 'noises', index, 'delay']}>
+          <FormField
+            label={t('pages.settings.subFormats.delayMs')}
+            name={['settings', 'noises', index, 'delay']}
+          >
             <Input />
           </FormField>
-          <FormField label={t('pages.settings.subFormats.applyTo')} name={['settings', 'noises', index, 'applyTo']}>
+          <FormField
+            label={t('pages.settings.subFormats.applyTo')}
+            name={['settings', 'noises', index, 'applyTo']}
+          >
             <Select
               options={['ip', 'ipv4', 'ipv6'].map((v) => ({
                 value: v,
@@ -181,9 +217,11 @@ export default function FreedomFields() {
         <Button
           size="small"
           type="primary"
-          icon={<PlusOutlined />}
+          icon={<PlusOutlined aria-hidden />}
           aria-label={t('add')}
-          onClick={() => appendFinalRule({ action: 'allow', network: '', port: '', ip: [], blockDelay: '' })}
+          onClick={() =>
+            appendFinalRule({ action: 'allow', network: '', port: '', ip: [], blockDelay: '' })
+          }
         />
         <span className="ml-8" style={{ opacity: 0.6 }}>
           {t('pages.xray.outboundForm.overrideXrayPrivateIp')}
@@ -204,7 +242,10 @@ export default function FreedomFields() {
               />
             </div>
           </Form.Item>
-          <FormField label={t('pages.xray.outboundForm.action')} name={['settings', 'finalRules', index, 'action']}>
+          <FormField
+            label={t('pages.xray.outboundForm.action')}
+            name={['settings', 'finalRules', index, 'action']}
+          >
             <Select
               options={['allow', 'block'].map((v) => ({
                 value: v,
@@ -212,7 +253,10 @@ export default function FreedomFields() {
               }))}
             />
           </FormField>
-          <FormField label={t('pages.inbounds.network')} name={['settings', 'finalRules', index, 'network']}>
+          <FormField
+            label={t('pages.inbounds.network')}
+            name={['settings', 'finalRules', index, 'network']}
+          >
             <Select
               allowClear
               placeholder="(any)"
@@ -222,12 +266,16 @@ export default function FreedomFields() {
               }))}
             />
           </FormField>
-          <FormField label={t('pages.inbounds.port')} name={['settings', 'finalRules', index, 'port']}>
+          <FormField
+            label={t('pages.inbounds.port')}
+            name={['settings', 'finalRules', index, 'port']}
+          >
             <Input placeholder="e.g. 80,443 or 1000-2000" />
           </FormField>
           <FormField label="IP / CIDR / geoip" name={['settings', 'finalRules', index, 'ip']}>
             <Select
               mode="tags"
+              tagRender={selectTagRender}
               tokenSeparators={[',', ' ']}
               placeholder="e.g. 10.0.0.0/8, geoip:private"
             />
