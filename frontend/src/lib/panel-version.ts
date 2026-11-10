@@ -26,6 +26,11 @@ export function formatPanelVersion(version: string | undefined | null): string {
   return /^\d/.test(normalized) ? `v${normalized}` : v;
 }
 
+// Display-only fork branding. API version, commit and update checks remain unchanged.
+export function formatForkHeaderVersion(version: string): string {
+  return version.trim().startsWith('dev+') ? 'Aghajani Edition' : formatPanelVersion(version);
+}
+
 export function isPanelUpdateAvailable(latest: string, current: string): boolean {
   if (!latest || !current) return false;
   // A dev+<sha> label and a release tag sit on different channels and carry no
