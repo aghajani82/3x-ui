@@ -41,7 +41,9 @@ type PanelUpdateInfo struct {
 }
 
 const (
-	panelUpdaterURL      = "https://raw.githubusercontent.com/aghajani82/3x-ui/main/update.sh"
+	forkRepo             = "aghajani82/3x-ui"
+	panelUpdaterURL      = "https://raw.githubusercontent.com/" + forkRepo + "/main/update.sh"
+	panelReleaseAPI      = "https://api.github.com/repos/" + forkRepo + "/releases"
 	maxPanelUpdaterBytes = 2 << 20
 	maxPanelReleaseBytes = 2 << 20
 	// devReleaseTag is the fixed-tag rolling pre-release the CI force-moves to the
@@ -437,9 +439,9 @@ func fetchLatestPanelVersion() (string, error) {
 // fetchPanelRelease fetches a release from GitHub. An empty tag resolves the
 // latest stable release; a non-empty tag (e.g. dev-latest) resolves that tag.
 func fetchPanelRelease(tag string) (*service.Release, error) {
-	url := "https://api.github.com/repos/aghajani82/3x-ui/releases/latest"
+	url := panelReleaseAPI + "/latest"
 	if tag != "" {
-		url = "https://api.github.com/repos/aghajani82/3x-ui/releases/tags/" + tag
+		url = panelReleaseAPI + "/tags/" + tag
 	}
 	client := (&service.SettingService{}).NewProxiedHTTPClient(10 * time.Second)
 	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
