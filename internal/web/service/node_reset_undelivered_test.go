@@ -160,11 +160,19 @@ func TestNodeResetDeliveredRightAway(t *testing.T) {
 			if err := reset.run(&InboundService{}, ib); err != nil {
 				t.Fatalf("reset: %v", err)
 			}
-			if got := rec.delivered(); !slices.Equal(got, []string{"reset-lost"}) {
-				t.Fatalf("node received resets %v, want [reset-lost]", got)
-			}
-			if left := pendingResetEmails(t, nodeID); len(left) != 0 {
-				t.Fatalf("delivered reset still queued: %v", left)
+			// Delivery is started inline but can finish in the background after its
+			// one-second request budget, especially under the race detector.
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				got := rec.delivered()
+				left := pendingResetEmails(t, nodeID)
+				if slices.Equal(got, []string{"reset-lost"}) && len(left) == 0 {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("node received resets %v with queue %v, want one delivered reset and no queued row", got, left)
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
 		})
 	}

@@ -15,7 +15,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 
-import { formatPanelVersion } from '@/lib/panel-version';
+import { formatForkHeaderVersion, formatPanelVersion } from '@/lib/panel-version';
 import { activateOnKey } from '@/utils/a11y';
 import type { Status } from '@/models/status';
 
@@ -194,7 +194,7 @@ export default function OverviewActionBar({
       ) : (
         <Tooltip title={t('pages.index.updatePanel')}>
           <button type="button" className="ov-panel-version ov-mono" onClick={onOpenPanelUpdate}>
-            {formatPanelVersion(panelVersion)}
+            {formatForkHeaderVersion(panelVersion)}
           </button>
         </Tooltip>
       )}
