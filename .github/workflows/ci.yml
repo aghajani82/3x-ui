@@ -377,3 +377,28 @@ jobs:
       - name: Audit
         run: npm run audit
         working-directory: frontend
+
+  # Local fork policy: frontend never shows paid placements and updates never jump upstream.
+  fork-sponsor-free-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Sponsor-free frontend and fork-only installer guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'return null;' frontend/src/components/sponsor/SponsorSlot.tsx
+          if grep -Eq 'HttpUtil.get|useQuery\(' frontend/src/api/queries/useSponsorsQuery.ts; then
+            echo "Sponsor requests must remain disabled in this fork."
+            exit 1
+          fi
+          if grep -iEq 'https://(raw.githubusercontent.com/|github.com/|api.github.com/repos/)mhsanaei/3x-ui' install.sh update.sh x-ui.sh internal/web/service/panel/panel.go; then
+            echo "Installer/update reverted to upstream releases."
+            exit 1
+          fi
+          grep -Fq 'forkRepo             = "aghajani82/3x-ui"' internal/web/service/panel/panel.go
+          grep -Fq 'ghcr.io/' .github/workflows/docker.yml
+          if grep -iqE 'ghcr.io/mhsanaei/3x-ui|hsanaeii/3x-ui' .github/workflows/docker.yml; then
+            echo "Docker image destination must remain this fork."
+            exit 1
+          fi
