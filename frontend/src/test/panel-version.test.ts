@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatForkHeaderVersion, formatPanelVersion, isPanelUpdateAvailable } from '@/lib/panel-version';
+import {
+  formatForkHeaderVersion,
+  formatPanelVersion,
+  isPanelUpdateAvailable,
+} from '@/lib/panel-version';
 
 // Parity with web/service/panel.go isNewerVersion.
 describe('isPanelUpdateAvailable', () => {
