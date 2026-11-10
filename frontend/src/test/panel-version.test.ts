@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatPanelVersion, isPanelUpdateAvailable } from '@/lib/panel-version';
+import { formatForkHeaderVersion, formatPanelVersion, isPanelUpdateAvailable } from '@/lib/panel-version';
 
 // Parity with web/service/panel.go isNewerVersion.
 describe('isPanelUpdateAvailable', () => {
@@ -59,5 +59,18 @@ describe('formatPanelVersion', () => {
     expect(formatPanelVersion('')).toBe('');
     expect(formatPanelVersion(undefined)).toBe('');
     expect(formatPanelVersion('?')).toBe('?');
+  });
+});
+
+describe('Aghajani Edition dashboard branding', () => {
+  it('replaces the development commit label in the dashboard header only', () => {
+    expect(formatForkHeaderVersion('dev+fbaaaa6a')).toBe('Aghajani Edition');
+    expect(formatPanelVersion('dev+fbaaaa6a')).toBe('dev+fbaaaa6a');
+  });
+
+  it('keeps normal stable versions and update comparisons untouched', () => {
+    expect(formatForkHeaderVersion('v3.11.0')).toBe('v3.11.0');
+    expect(isPanelUpdateAvailable('dev+12345678', 'dev+fbaaaa6a')).toBe(true);
+    expect(isPanelUpdateAvailable('dev+fbaaaa6a', 'dev+fbaaaa6a')).toBe(false);
   });
 });
