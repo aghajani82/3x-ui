@@ -1153,15 +1153,28 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 		}
 		t.renderDraftPicker(chatId, draft, picker.InlineKeyboard)
 	case "add_client_attach_done":
-		if draft.receiverInboundID == 0 && len(draft.receiverInboundIDs) > 0 {
-			draft.receiverInboundID = draft.receiverInboundIDs[0]
-		}
-		if draft.receiverInboundID == 0 {
-			t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.getInboundsFailed"))
+		if len(draft.receiverInboundIDs) == 0 {
+			// An empty selection is not a database read failure.
+			draft.receiverInboundID = 0
+			t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.chooseInbound"))
 			return
 		}
+		draft.receiverInboundID = draft.receiverInboundIDs[0]
 		t.addClient(chatId, draft, t.BuildClientDraftMessage(draft), callbackQuery.Message.GetMessageID())
 	case "add_client_submit_disable", "add_client_submit_enable":
+		// A newly drafted client has no inbound until the admin chooses one.
+		// Guide Submit directly to the existing picker rather than reporting a
+		// misleading "Failed to get inbounds" error or attaching one silently.
+		if len(draft.receiverInboundIDs) == 0 {
+			picker, err := t.getInboundsAttachPicker(draft)
+			if err != nil {
+				t.sendCallbackAnswerTgBot(callbackQuery.ID, err.Error())
+				return
+			}
+			t.sendCallbackAnswerTgBot(callbackQuery.ID, t.I18nBot("tgbot.answers.chooseInbound"))
+			t.renderDraftPicker(chatId, draft, picker.InlineKeyboard)
+			return
+		}
 		// Both submits land here and differ only in the enable flag; the data is
 		// short enough never to be hashed, so its raw form is the discriminator.
 		draft.enable = callbackQuery.Data == "add_client_submit_enable"
