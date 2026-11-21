@@ -254,8 +254,11 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 	// Handle the command.
 	switch command {
 	case "help":
-		msg += t.I18nBot("tgbot.commands.help")
-		msg += t.I18nBot("tgbot.commands.pleaseChoose")
+		// Help opens the same interactive keyboard as /start; a notice would
+		// only have the Hide button and strand the user without a menu.
+		t.clearBroadcastPrompt(messageActor(*message))
+		t.screenHome(chatId, message.From.ID, screenSendNew)
+		return
 	case "start":
 		if len(commandArgs) > 0 {
 			// A placeholder user can be neither throttled nor bound, so its claim is
